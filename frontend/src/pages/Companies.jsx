@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getCompanies } from "../api";
+import { getCompanies, getFollows, followCompany, unfollowCompany } from "../api";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const COLORS = ["#3b82f6", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#06b6d4", "#f59e0b", "#ec4899"];
@@ -34,10 +34,37 @@ function Companies() {
   const [companies, setCompanies] = useState([]);
   const [activeType, setActiveType] = useState(null);
   const [sortBy, setSortBy] = useState("name");
+  const [follows, setFollows] = useState([]);
+  const [followLoading, setFollowLoading] = useState({});
 
   useEffect(() => {
     getCompanies().then(setCompanies);
+    getFollows().then((data) => setFollows(data || [])).catch(() => {});
   }, []);
+
+  const isFollowed = (companyId) => follows.some((f) => f.company_id === companyId);
+
+  const handleToggleFollow = async (companyId, e) => {
+    e.stopPropagation();
+    setFollowLoading((prev) => ({ ...prev, [companyId]: true }));
+    try {
+      if (isFollowed(companyId)) {
+        await unfollowCompany(companyId);
+        setFollows((prev) => prev.filter((f) => f.company_id !== companyId));
+      } else {
+        await followCompany(companyId);
+        const updated = await getFollows();
+        setFollows(updated || []);
+      }
+    } catch (err) {
+      const msg = (err.message || "").toLowerCase();
+      if (msg.includes("400")) alert("关注失败：最多关注 7 家公司");
+      else if (msg.includes("409")) alert("该公司已被关注");
+      else alert("操作失败，请重试");
+    } finally {
+      setFollowLoading((prev) => ({ ...prev, [companyId]: false }));
+    }
+  };
 
   if (companies.length === 0) return <div className="loading">加载中...</div>;
 
@@ -139,6 +166,7 @@ function Companies() {
             <thead>
               <tr>
                 <th>公司</th>
+                <th>关注</th>
                 <th>类型</th>
                 <th>领域</th>
                 <th>上市</th>
@@ -154,6 +182,16 @@ function Companies() {
                     {c.name_cn && c.name !== c.name_cn && <span style={{ color: "var(--text-secondary)", fontSize: 11, marginLeft: 6 }}>({c.name})</span>}
                     {c.ticker && <span style={{ color: "var(--text-secondary)", fontSize: 12, marginLeft: 6 }}>{c.ticker}</span>}
                   </td>
+                  <td style={{ textAlign: "center" }}>
+                    <button
+                      onClick={(e) => handleToggleFollow(c.id, e)}
+                      disabled={followLoading[c.id]}
+                      className={`follow-btn ${isFollowed(c.id) ? "followed" : ""}`}
+                      title={isFollowed(c.id) ? "取消关注" : "添加为核心公司"}
+                    >
+                      {followLoading[c.id] ? "..." : isFollowed(c.id) ? "已关注" : "+ 关注"}
+                    </button>
+                  </td>
                   <td>
                     <span className="badge" style={{ background: `${TYPE_COLORS[c.company_type] || "#666"}22`, color: TYPE_COLORS[c.company_type] || "#666" }}>
                       {TYPE_LABELS[c.company_type] || c.company_type}
@@ -162,7 +200,7 @@ function Companies() {
                   <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{c.sector}</td>
                   <td>{c.is_listed ? <span className="badge badge-green">上市</span> : <span className="badge badge-orange">未上市</span>}</td>
                   <td style={{ fontWeight: c.revenue_2024 > 100 ? 600 : 400 }}>
-                    {c.revenue_2024 ? `$${c.revenue_2024}B` : "-"}
+                    {c.revenue_2024 ? `$${c.revenue_2024}亿` : "-"}
                   </td>
                   <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                     {c.employee_count ? c.employee_count.toLocaleString() : "-"}

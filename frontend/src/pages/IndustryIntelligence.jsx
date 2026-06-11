@@ -24,87 +24,122 @@ const CATEGORY_ICONS = {
   packaging: "📦", distribution: "📡", end_market: "📊", gpu_cloud: "☁️",
 };
 
-const IMPACT_COLORS = { "重大": "#ef4444", "中等": "#f59e0b", "轻微": "#3b82f6" };
-
-// ── Tier label config ──
 const TIER_CONFIG = {
   1: { label: "P0 核心", color: "#ef4444" },
   2: { label: "P1 重要", color: "#f59e0b" },
   3: { label: "P2 参考", color: "#64748b" },
 };
 
-// ── Price Return Table Component (reused from JudgmentLog) ──
-function PriceReturnTable({ preReturns, postReturns }) {
-  const preTickers = preReturns ? Object.keys(preReturns).filter((t) => t !== "SOX") : [];
-  const postTickers = postReturns ? Object.keys(postReturns).filter((t) => t !== "SOX") : [];
-  const allTickers = [...new Set([...preTickers, ...postTickers])];
+// ── 边际变化配置 ──
+const WINDOW_LABELS = {
+  "30d": "30日变化",
+  "90d": "90日变化",
+  "last_change": "环比上期",
+};
 
-  if (allTickers.length === 0 && !(preReturns?.SOX || postReturns?.SOX)) return null;
+// ── Expanded Detail Panel ──
+function ExpandedDetail({ indicator }) {
+  const [observations, setObservations] = useState([]);
+  const [loadingObs, setLoadingObs] = useState(false);
 
-  const fmt = (v) => v == null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
-  const color = (v) => v == null ? "var(--text-secondary)" : v >= 0 ? "var(--success, #22c55e)" : "var(--error, #ef4444)";
+  useEffect(() => {
+    if (!indicator) return;
+    setLoadingObs(true);
+    getIndustryIndicator(indicator.id)
+      .then((data) => {
+        const sorted = (data.observations || [])
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        setObservations(sorted);
+      })
+      .finally(() => setLoadingObs(false));
+  }, [indicator?.id]);
 
   return (
-    <div style={{ marginTop: 8, fontSize: 12, overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 280 }}>
-        <thead>
-          <tr>
-            <th style={thStyle}>标的</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>前10日</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>后10日</th>
-            <th style={{ ...thStyle, textAlign: "right" }}>vs SOX</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(preReturns?.SOX || postReturns?.SOX) && (
-            <tr>
-              <td style={tdStyle}>SOX</td>
-              <td style={{ ...tdStyle, textAlign: "right", color: color(preReturns?.SOX?.abs) }}>{fmt(preReturns?.SOX?.abs)}</td>
-              <td style={{ ...tdStyle, textAlign: "right", color: color(postReturns?.SOX?.abs) }}>{fmt(postReturns?.SOX?.abs)}</td>
-              <td style={{ ...tdStyle, textAlign: "right", color: "var(--text-secondary)" }}>基准</td>
-            </tr>
-          )}
-          {allTickers.map((t) => {
-            const pre = preReturns?.[t];
-            const post = postReturns?.[t];
-            return (
-              <tr key={t}>
-                <td style={tdStyle}>{t}</td>
-                <td style={{ ...tdStyle, textAlign: "right", color: color(pre?.abs) }}>{fmt(pre?.abs)}</td>
-                <td style={{ ...tdStyle, textAlign: "right", color: color(post?.abs) }}>{fmt(post?.abs)}</td>
-                <td style={{ ...tdStyle, textAlign: "right", color: color(pre?.rel) }}>{pre?.rel != null ? fmt(pre.rel) : "—"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+    <div style={{
+      marginTop: 10, padding: "12px 14px",
+      background: "rgba(59,130,246,0.04)",
+      border: "1px solid rgba(59,130,246,0.15)",
+      borderRadius: 8, width: "100%",
+    }}>
+      {/* 行业景气度 */}
+      {indicator.industry_impact && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4, fontWeight: 600 }}>📊 行业景气度</div>
+          <div style={{
+            fontSize: 12, color: "var(--text)", lineHeight: 1.5, padding: "6px 10px",
+            background: "rgba(34,197,94,0.06)", borderRadius: 6, borderLeft: "2px solid #22c55e",
+          }}>{indicator.industry_impact}</div>
+        </div>
+      )}
+
+      {/* 产业链影响 */}
+      {indicator.chain_impact && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4, fontWeight: 600 }}>🔗 产业链影响</div>
+          <div style={{
+            fontSize: 12, color: "var(--text)", lineHeight: 1.5, padding: "6px 10px",
+            background: "rgba(59,130,246,0.06)", borderRadius: 6, borderLeft: "2px solid #3b82f6",
+          }}>{indicator.chain_impact}</div>
+        </div>
+      )}
+
+      {/* 重点公司影响 */}
+      {indicator.company_impact && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4, fontWeight: 600 }}>🏢 重点公司</div>
+          <div style={{
+            fontSize: 12, color: "var(--text)", lineHeight: 1.5, padding: "6px 10px",
+            background: "rgba(245,158,11,0.06)", borderRadius: 6, borderLeft: "2px solid #f59e0b",
+          }}>{indicator.company_impact}</div>
+        </div>
+      )}
+
+      {/* 历史曲线 */}
+      <div style={{ marginTop: 8 }}>
+        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6, fontWeight: 600 }}>📈 历史趋势</div>
+        {loadingObs ? (
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", padding: 20, textAlign: "center" }}>加载中...</div>
+        ) : observations.length > 1 ? (
+          <div style={{ height: 160 }}>
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={observations}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border, #334155)" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--text-secondary)" }} tickFormatter={(v) => v.slice(0, 7)} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--text-secondary)" }} />
+                <Tooltip contentStyle={{ background: "var(--card-bg)", border: "1px solid var(--border)", borderRadius: 4, fontSize: 12 }} />
+                <Line type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "var(--text-secondary)", padding: 10, textAlign: "center" }}>暂无历史数据</div>
+        )}
+      </div>
+
+      {/* 关联标的 */}
+      {indicator.related_tickers && (
+        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 8 }}>
+          <span>关联: </span>
+          {indicator.related_tickers.split(",").map((t) => (
+            <span key={t} style={{ padding: "1px 6px", background: "rgba(59,130,246,0.1)", borderRadius: 3, marginLeft: 4, fontSize: 10 }}>{t.trim()}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-const thStyle = { padding: "3px 8px", borderBottom: "1px solid var(--border, #334155)", color: "var(--text-secondary, #94a3b8)", fontWeight: 500, fontSize: 11 };
-const tdStyle = { padding: "3px 8px", borderBottom: "1px solid var(--border, #334155)", fontWeight: 600, fontSize: 12 };
-
-// ── Source Status Badge ──
-function SourceBadge({ source, status }) {
-  const colors = { ok: "#22c55e", stale: "#eab308", outdated: "#ef4444", never: "#64748b" };
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, padding: "2px 8px", borderRadius: 4, background: `${colors[status] || "#64748b"}22`, color: colors[status] || "#64748b" }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: colors[status] || "#64748b", display: "inline-block" }} />
-      {source}
-    </span>
-  );
-}
-
-// ── Indicator Card ──
+// ── Indicator Card (截面卡片) ──
 function IndicatorCard({ indicator, onToggleExpand, isExpanded }) {
   const hasData = indicator.latest_value != null;
   const change = indicator.change_pct;
+  const marginalChange = indicator.marginal_change_pct;
+  const windowLabel = WINDOW_LABELS[indicator.comparison_window] || "";
   const tierCfg = TIER_CONFIG[indicator.tier] || TIER_CONFIG[3];
 
   return (
     <div style={{
-      background: "var(--card-bg, #1e293b)", border: "1px solid var(--border, #334155)",
+      background: "var(--card-bg, #1e293b)", border: isExpanded ? "1px solid #3b82f6" : "1px solid var(--border, #334155)",
       borderRadius: 8, padding: "12px 14px", minWidth: 220, flex: "1 1 260px",
       transition: "border-color 0.2s",
     }}>
@@ -118,13 +153,15 @@ function IndicatorCard({ indicator, onToggleExpand, isExpanded }) {
         </span>
       </div>
 
-      {/* Value */}
       {hasData ? (
         <>
+          {/* 当前值 */}
           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text, #f1f5f9)", lineHeight: 1.2 }}>
             {typeof indicator.latest_value === "number" ? indicator.latest_value.toLocaleString() : indicator.latest_value}
             {indicator.unit && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-secondary)", marginLeft: 4 }}>{indicator.unit}</span>}
           </div>
+
+          {/* 环比变化 */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2, fontSize: 12 }}>
             {change != null && (
               <span style={{ color: change >= 0 ? "var(--success, #22c55e)" : "var(--error, #ef4444)", fontWeight: 600 }}>
@@ -134,12 +171,33 @@ function IndicatorCard({ indicator, onToggleExpand, isExpanded }) {
             {indicator.latest_date && (
               <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>{indicator.latest_date}</span>
             )}
-            <span style={{ fontSize: 10, color: "var(--text-secondary)", marginLeft: "auto" }}>
-              {indicator.update_frequency || ""}
-            </span>
           </div>
 
-          {/* Analysis text */}
+          {/* 边际变化 */}
+          {marginalChange != null && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 1, fontSize: 11 }}>
+              <span style={{
+                color: marginalChange >= 0 ? "var(--success, #22c55e)" : "var(--error, #ef4444)",
+                fontWeight: 500,
+              }}>
+                {marginalChange >= 0 ? "↑" : "↓"} {marginalChange > 0 ? "+" : ""}{marginalChange.toFixed(1)}%
+              </span>
+              {windowLabel && (
+                <span style={{ color: "var(--text-secondary)", fontSize: 10 }}>{windowLabel}</span>
+              )}
+              {/* 景气度方向指示 */}
+              <span style={{
+                marginLeft: "auto", fontSize: 10, padding: "1px 6px", borderRadius: 3,
+                background: marginalChange > 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                color: marginalChange > 0 ? "#22c55e" : "#ef4444",
+                fontWeight: 600,
+              }}>
+                景气{marginalChange > 0 ? "↑" : "↓"}
+              </span>
+            </div>
+          )}
+
+          {/* AI分析 */}
           {indicator.analysis && (
             <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5, padding: "6px 8px", background: "rgba(59,130,246,0.06)", borderRadius: 6, borderLeft: "2px solid #3b82f6" }}>
               {indicator.analysis}
@@ -154,25 +212,18 @@ function IndicatorCard({ indicator, onToggleExpand, isExpanded }) {
               <span>{indicator.source}</span>
             )}
           </div>
+
+          {/* 展开按钮 */}
+          <button onClick={() => onToggleExpand?.(indicator)}
+            style={{ background: "none", border: "none", color: "var(--accent, #3b82f6)", cursor: "pointer", fontSize: 11, padding: 0, marginTop: 6 }}>
+            {isExpanded ? "收起分析 ▲" : "展开影响分析 ▼"}
+          </button>
+
+          {/* 展开的详细面板 */}
+          {isExpanded && <ExpandedDetail indicator={indicator} />}
         </>
       ) : (
         <div style={{ fontSize: 13, color: "var(--text-secondary)", padding: "12px 0" }}>暂无数据</div>
-      )}
-
-      {/* Toggle price performance */}
-      {indicator.related_tickers && (
-        <button onClick={() => onToggleExpand?.(indicator)}
-          style={{ background: "none", border: "none", color: "var(--accent, #3b82f6)", cursor: "pointer", fontSize: 11, padding: 0, marginTop: 6 }}>
-          {isExpanded ? "收起涨跌幅 ▲" : "关联证券 ±10日 ▼"}
-        </button>
-      )}
-
-      {isExpanded && hasData && (
-        indicator.pre_event_returns || indicator.post_event_returns ? (
-          <PriceReturnTable preReturns={indicator.pre_event_returns} postReturns={indicator.post_event_returns} />
-        ) : (
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>正在获取涨跌幅数据...</div>
-        )
       )}
     </div>
   );
@@ -183,18 +234,53 @@ function ChainSection({ category, indicators, expanded, onToggle, onExpandCard, 
   const hasAny = indicators.length > 0;
   if (!hasAny) return null;
 
+  // 计算该环节的整体景气方向
+  const marginalChanges = indicators
+    .map((i) => i.marginal_change_pct)
+    .filter((v) => v != null);
+  const avgMarginal = marginalChanges.length > 0
+    ? marginalChanges.reduce((a, b) => a + b, 0) / marginalChanges.length
+    : null;
+
   return (
     <div style={{ marginBottom: 14 }}>
-      <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", cursor: "pointer", borderRadius: "6px 6px 0 0", background: "var(--card-bg, #1e293b)", borderBottom: expanded ? "1px solid var(--border, #334155)" : "none", userSelect: "none" }}>
+      <div onClick={onToggle} style={{
+        display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
+        cursor: "pointer", borderRadius: "6px 6px 0 0",
+        background: "var(--card-bg, #1e293b)",
+        borderBottom: expanded ? "1px solid var(--border, #334155)" : "none",
+        userSelect: "none",
+      }}>
         <span style={{ fontSize: 14 }}>{CATEGORY_ICONS[category]}</span>
-        <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text, #f1f5f9)" }}>{CATEGORY_CN[category] || category}</span>
+        <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text, #f1f5f9)" }}>
+          {CATEGORY_CN[category] || category}
+        </span>
+        {avgMarginal != null && (
+          <span style={{
+            fontSize: 11, padding: "1px 6px", borderRadius: 3,
+            background: avgMarginal > 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+            color: avgMarginal > 0 ? "#22c55e" : "#ef4444",
+            fontWeight: 600,
+          }}>
+            景气{avgMarginal > 0 ? "↑" : "↓"} {avgMarginal > 0 ? "+" : ""}{avgMarginal.toFixed(1)}%
+          </span>
+        )}
         <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>({indicators.length}项)</span>
-        <span style={{ marginLeft: "auto", color: "var(--text-secondary)", fontSize: 12 }}>{expanded ? "收起 ▲" : "展开 ▼"}</span>
+        <span style={{ marginLeft: "auto", color: "var(--text-secondary)", fontSize: 12 }}>
+          {expanded ? "收起 ▲" : "展开 ▼"}
+        </span>
       </div>
       {expanded && (
-        <div style={{ padding: 12, background: "var(--card-bg-alt, #0f172a)", border: "1px solid var(--border, #334155)", borderTop: "none", borderRadius: "0 0 8px 8px", display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <div style={{
+          padding: 12, background: "var(--card-bg-alt, #0f172a)",
+          border: "1px solid var(--border, #334155)", borderTop: "none",
+          borderRadius: "0 0 8px 8px",
+          display: "flex", flexWrap: "wrap", gap: 10,
+        }}>
           {indicators.map((ind) => (
-            <IndicatorCard key={ind.id} indicator={ind} onToggleExpand={onExpandCard} isExpanded={expandedCard?.id === ind.id} />
+            <IndicatorCard key={ind.id} indicator={ind}
+              onToggleExpand={onExpandCard}
+              isExpanded={expandedCard?.id === ind.id} />
           ))}
         </div>
       )}
@@ -202,72 +288,13 @@ function ChainSection({ category, indicators, expanded, onToggle, onExpandCard, 
   );
 }
 
-// ── Timeline Feed (bottom section) ──
-function TimelineFeed({ events, loading }) {
-  const [filter, setFilter] = useState("all");
-
-  const filtered = filter === "all" ? events : events.filter((e) => e.event_type === filter);
-
-  if (loading) return <div style={{ textAlign: "center", padding: 20, color: "var(--text-secondary)" }}>加载中...</div>;
-
-  return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--text, #f1f5f9)" }}>时间线</h3>
-        <div style={{ display: "flex", borderRadius: 6, border: "1px solid var(--border, #334155)", overflow: "hidden", marginLeft: 12 }}>
-          {["all", "judgment", "collection"].map((f) => (
-            <button key={f} onClick={() => setFilter(f)}
-              style={{ padding: "4px 12px", border: "none", background: filter === f ? "var(--accent, #3b82f6)" : "transparent", color: filter === f ? "#fff" : "var(--text-secondary)", cursor: "pointer", fontSize: 12 }}>
-              {f === "all" ? "全部" : f === "judgment" ? "判断" : "采集"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div style={{ textAlign: "center", padding: 20, color: "var(--text-secondary)" }}>暂无时间线事件</div>
-      ) : (
-        filtered.map((event) => (
-          <div key={event.id} style={{
-            marginBottom: 10, padding: "10px 14px",
-            background: "var(--card-bg, #1e293b)",
-            border: "1px solid var(--border, #334155)",
-            borderRadius: 8,
-            borderLeft: event.event_type === "judgment"
-              ? `4px solid ${IMPACT_COLORS[event.impact_level] || "#3b82f6"}`
-              : "4px solid #3b82f6",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-                {event.event_time ? new Date(event.event_time).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""}
-              </span>
-              <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 3, fontWeight: 600, background: event.event_type === "judgment" ? `${IMPACT_COLORS[event.impact_level] || "#3b82f6"}22` : "#3b82f622", color: event.event_type === "judgment" ? (IMPACT_COLORS[event.impact_level] || "#3b82f6") : "#3b82f6" }}>
-                {event.event_type === "judgment" ? (event.impact_level || "判断") : "采集"}
-              </span>
-              {event.source_name && <span style={{ fontSize: 10, color: "var(--text-secondary)", padding: "1px 6px", background: "var(--card-bg-alt, #0f172a)", borderRadius: 4 }}>{event.source_name}</span>}
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text, #f1f5f9)" }}>{event.title}</div>
-            {event.value_display && <div style={{ fontSize: 14, color: "var(--text)", marginTop: 2 }}>{event.value_display}</div>}
-            {event.description && <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>{event.description}</div>}
-
-            {(event.pre_event_returns || event.post_event_returns) && (
-              <PriceReturnTable preReturns={event.pre_event_returns} postReturns={event.post_event_returns} />
-            )}
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
-
-// ── Main Page ──
+// ── Main Page (截面) ──
 function IndustryIntelligence() {
   const [searchParams] = useSearchParams();
-  const timelineRef = useRef(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [tierFilter, setTierFilter] = useState("all"); // "all" | 1 | 2 | 3
+  const [tierFilter, setTierFilter] = useState("all");
   const [expandedSections, setExpandedSections] = useState(() =>
     CATEGORY_ORDER.reduce((a, c) => ({ ...a, [c]: true }), {})
   );
@@ -296,17 +323,8 @@ function IndustryIntelligence() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Scroll to timeline if ?tab=timeline
-  useEffect(() => {
-    if (data && searchParams.get("tab") === "timeline" && timelineRef.current) {
-      setTimeout(() => timelineRef.current.scrollIntoView({ behavior: "smooth" }), 300);
-    }
-  }, [data, searchParams]);
-
   const indicators = data?.indicators || [];
-  const timeline = data?.timeline || [];
   const stats = data?.stats || {};
-  const dataSources = data?.data_sources || [];
 
   // Group by category
   const grouped = CATEGORY_ORDER
@@ -335,17 +353,11 @@ function IndustryIntelligence() {
     .filter((i) => i.last_updated)
     .sort((a, b) => new Date(b.last_updated) - new Date(a.last_updated))[0]?.last_updated;
 
-  // ── Render ──
   if (loading && !data) {
     return (
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ textAlign: "center", padding: 60, color: "var(--text-secondary)" }}>
           <div style={{ fontSize: 14, marginBottom: 8 }}>加载中...</div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-            {[1, 2, 3].map((i) => (
-              <div key={i} style={{ width: 240, height: 120, background: "var(--card-bg, #1e293b)", borderRadius: 8, animation: "pulse 1.5s infinite" }} />
-            ))}
-          </div>
         </div>
       </div>
     );
@@ -369,7 +381,12 @@ function IndustryIntelligence() {
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "var(--text, #f1f5f9)" }}>产业情报</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: "var(--text, #f1f5f9)" }}>产业情报 · 截面</h2>
+            <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(59,130,246,0.12)", color: "#3b82f6", fontWeight: 600 }}>
+              边际变化分析
+            </span>
+          </div>
           <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-secondary)" }}>
             {latestUpdate ? `最后更新: ${new Date(latestUpdate).toLocaleDateString("zh-CN")}` : ""}
             {stats.total_indicators > 0 && ` · ${stats.total_indicators}项指标 · ${stats.with_data}项有数据`}
@@ -386,16 +403,6 @@ function IndustryIntelligence() {
           </button>
         </div>
       </div>
-
-      {/* Data source bar */}
-      {dataSources.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 12px", marginBottom: 12, background: "var(--card-bg, #1e293b)", borderRadius: 8, border: "1px solid var(--border, #334155)", alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: "var(--text-secondary)", marginRight: 4 }}>数据源:</span>
-          {dataSources.map((ds) => (
-            <SourceBadge key={ds.source} source={ds.source} status={ds.status} />
-          ))}
-        </div>
-      )}
 
       {/* Add judgment form */}
       {showForm && (
@@ -446,7 +453,8 @@ function IndustryIntelligence() {
             </div>
             <div style={{ gridColumn: "1/-1" }}>
               <label style={{ fontSize: 12, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>证据/依据</label>
-              <textarea value={form.evidence} onChange={(e) => setForm({ ...form, evidence: e.target.value })} style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)", color: "#fff", minHeight: 50 }} />
+              <textarea value={form.evidence} onChange={(e) => setForm({ ...form, evidence: e.target.value })}
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)", color: "#fff", minHeight: 50 }} />
             </div>
           </div>
           <button type="submit" style={{ marginTop: 12, padding: "8px 20px", background: "var(--accent-blue, #3b82f6)", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>保存记录</button>
@@ -478,20 +486,13 @@ function IndustryIntelligence() {
         </div>
       ) : (
         filteredGrouped.map(([cat, inds]) => (
-          <ChainSection
-            key={cat} category={cat} indicators={inds}
+          <ChainSection key={cat} category={cat} indicators={inds}
             expanded={expandedSections[cat]}
             onToggle={() => setExpandedSections((prev) => ({ ...prev, [cat]: !prev[cat] }))}
             onExpandCard={(ind) => setExpandedCard(expandedCard?.id === ind.id ? null : ind)}
-            expandedCard={expandedCard}
-          />
+            expandedCard={expandedCard} />
         ))
       )}
-
-      {/* Timeline feed at bottom */}
-      <div ref={timelineRef}>
-        <TimelineFeed events={timeline} loading={loading && timeline.length === 0} />
-      </div>
 
       {/* Legend */}
       <div style={{ marginTop: 20, padding: "8px 12px", fontSize: 11, color: "var(--text-secondary)", borderTop: "1px solid var(--border, #334155)", display: "flex", gap: 16, flexWrap: "wrap" }}>
@@ -499,8 +500,8 @@ function IndustryIntelligence() {
         <span style={{ color: TIER_CONFIG[1].color }}>■ P0 核心</span>
         <span style={{ color: TIER_CONFIG[2].color }}>■ P1 重要</span>
         <span style={{ color: TIER_CONFIG[3].color }}>■ P2 参考</span>
-        <span>▲上涨 ▼下降</span>
-        <span>涨跌幅对标费城半导体指数(SOX)</span>
+        <span>景气↑/↓ = 边际变化方向</span>
+        <span>点击卡片展开 → 行业/产业链/公司影响分析</span>
         <span>分析由 DeepSeek AI 生成</span>
       </div>
     </div>

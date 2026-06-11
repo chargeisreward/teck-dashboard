@@ -1,5 +1,7 @@
 import logging
 import os
+from bisect import bisect_right
+from collections import defaultdict
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +14,7 @@ from models import (
     IndustryChainLink, CompanyChainLink, Financial, SupplyDemand,
     KeyIndicator, IndicatorObservation, Forecast, JudgmentLog,
     ScoringDimension, CompanyScore, Portfolio, PortfolioHolding,
-    PortfolioPerformance, PortfolioEvaluation, TimelineEvent,
+    PortfolioPerformance, PortfolioEvaluation, TimelineEvent, Follow,
 )
 from schemas import (
     CompanyOut, CompanyDetail, ProductOut, MarketDataOut,
@@ -24,11 +26,13 @@ from schemas import (
     ScoringDimensionOut, CompanyScoreOut, CompanyScoreSummary,
     PortfolioOut, PortfolioDetail, PortfolioHoldingOut,
     PortfolioPerformanceOut, PortfolioEvaluationOut,
+    HoldingTrackingData, PortfolioTrackingData, WeightUpdateRequest,
     ValuationParams, PeerGroupDef, ValuationCompanyData,
     PeerComparisonResultOut, ValuationResultOut, PriceDataPoint,
     ChainSupplyDemandScoreOut, CompanyAdjustmentOut,
     FuturePEValuationParams, FuturePEValuationResultOut,
     FuturePEComparisonResultOut, TimelineEventOut,
+    FollowOut, IndustryChainCard, DashboardOverview, FollowActionResponse,
 )
 import ai_analysis
 from price_performance import compute_relative_performance
@@ -58,12 +62,24 @@ from valuation_v2 import (
     SupplyDemandAnalyzer, FuturePEModel, CompanyInput,
 )
 from price_data import fetch_price_history, get_current_price, get_stock_info, get_top_gainers_losers, get_price_history_cached, get_stock_info_cached
+from models import StockInfoCache
 from price_performance import update_timeline_returns, refresh_pending_post_events, compute_relative_performance
 from industry_collector import collect_all as run_industry_collectors
 from scheduler import init_scheduler
 from refresh_company_data import refresh_all_company_data, verify_data_integrity
+from portfolio_tracking import compute_holding_returns, derive_eps_metrics, compute_portfolio_aggregates
 
 Base.metadata.create_all(bind=engine)
+
+# ── 自动初始化数据库（仅在首次启动时） ──
+try:
+    from seed_data import seed as _seed_db
+    _seed_db()
+    # 也运行产业链数据采集（市场数据/来源标注）
+    from data_pipeline.market_size_collector import collect_chain_data
+    collect_chain_data()
+except Exception as _e:
+    print(f"[init] DB seed skipped: {_e}")
 
 app = FastAPI(title="AI芯片与半导体存储产业链分析仪表盘")
 logger = logging.getLogger(__name__)
@@ -112,6 +128,153 @@ def get_dashboard_summary(db: Session = Depends(get_db)):
         total_storage_products=total_storage,
         latest_market_caps=[{"name": n, "ticker": t, "market_cap": c} for n, t, c in latest_caps],
         product_categories=[{"category": cat, "count": cnt} for cat, cnt in categories],
+    )
+
+
+# ── 新版市场概览聚合端点 ───────────────────────────────────
+
+TYPE_LABELS_OVERVIEW = {
+    "chip_design": "AI芯片设计", "manufacturing": "晶圆制造",
+    "memory": "存储/HBM", "packaging": "先进封装",
+    "equipment": "半导体设备", "eda": "EDA/IP",
+    "llm": "大模型/AI", "cloud": "云厂商",
+    "application": "应用厂商", "networking": "网络互联",
+}
+
+
+@app.get("/api/dashboard/overview", response_model=DashboardOverview)
+def get_dashboard_overview(db: Session = Depends(get_db)):
+    """市场概览聚合数据：产业链卡片 + 核心公司（单次查询）"""
+    total_companies = db.query(Company).count()
+    total_products = db.query(Product).count()
+    total_storage = db.query(StorageProduct).count()
+
+    # StockInfoCache 批量加载
+    cache_records = db.query(StockInfoCache).all()
+    cache_map = {}
+    for r in cache_records:
+        if r.ticker and isinstance(r.data_json, dict):
+            cache_map[r.ticker.upper()] = r.data_json
+
+    # 每公司最新财务记录
+    latest_year_subq = (
+        db.query(Financial.company_id, func.max(Financial.fiscal_year).label("max_year"))
+        .group_by(Financial.company_id).subquery()
+    )
+    latest_fins = (
+        db.query(Financial)
+        .join(latest_year_subq,
+              (Financial.company_id == latest_year_subq.c.company_id) &
+              (Financial.fiscal_year == latest_year_subq.c.max_year))
+        .all()
+    )
+    fin_map = {f.company_id: f for f in latest_fins}
+
+    # 按 company_type 分组聚合
+    companies = db.query(Company).all()
+    type_agg = {}
+    for c in companies:
+        ct = c.company_type or "other"
+        if ct not in type_agg:
+            type_agg[ct] = {"count": 0, "cp_sum": 0.0, "cp_n": 0,
+                           "rev_sum": 0.0, "ni_sum": 0.0, "mcap_sum": 0.0}
+        agg = type_agg[ct]
+        agg["count"] += 1
+        if c.ticker and c.ticker.upper() in cache_map:
+            d = cache_map[c.ticker.upper()]
+            try:
+                cp = d.get("change_pct")
+                if cp is not None:
+                    agg["cp_sum"] += float(cp)
+                    agg["cp_n"] += 1
+            except (TypeError, ValueError):
+                pass
+            try:
+                mcap = d.get("market_cap_b")
+                if mcap is not None:
+                    agg["mcap_sum"] += float(mcap)
+            except (TypeError, ValueError):
+                pass
+        fin = fin_map.get(c.id)
+        if fin:
+            if fin.revenue is not None:
+                agg["rev_sum"] += fin.revenue
+            if fin.net_income is not None:
+                agg["ni_sum"] += fin.net_income
+
+    chains = []
+    for ct, agg in type_agg.items():
+        if ct == "other":
+            continue
+        chains.append(IndustryChainCard(
+            company_type=ct,
+            name_cn=TYPE_LABELS_OVERVIEW.get(ct, ct),
+            company_count=agg["count"],
+            avg_change_pct=round(agg["cp_sum"] / agg["cp_n"], 2) if agg["cp_n"] > 0 else None,
+            total_revenue_ttm=round(agg["rev_sum"], 1) if agg["rev_sum"] > 0 else None,
+            total_net_income_ttm=round(agg["ni_sum"], 1) if agg["ni_sum"] > 0 else None,
+            total_market_cap=round(agg["mcap_sum"], 1) if agg["mcap_sum"] > 0 else None,
+        ))
+
+    # 核心公司（已关注）
+    follows = db.query(Follow).order_by(Follow.created_at).all()
+    f_company_ids = [f.company_id for f in follows]
+    f_companies = {c.id: c for c in db.query(Company).filter(Company.id.in_(f_company_ids)).all()} if f_company_ids else {}
+    core = []
+    for f in follows:
+        co = f_companies.get(f.company_id)
+        if not co:
+            continue
+        info = {"current_price": None, "change_pct": None, "pe_ttm": None,
+                "market_cap_b": None, "revenue_b": None}
+        if co.ticker and co.ticker.upper() in cache_map:
+            d = cache_map[co.ticker.upper()]
+            info["current_price"] = d.get("current_price") or d.get("current_price_usd")
+            info["change_pct"] = d.get("change_pct")
+            info["pe_ttm"] = d.get("pe_ttm")
+            mcap = d.get("market_cap_b")
+            info["market_cap_b"] = round(float(mcap), 1) if mcap else None
+            rev = d.get("revenue_b")
+            info["revenue_b"] = round(float(rev), 1) if rev else None
+        core.append({
+            "id": co.id, "ticker": co.ticker, "name": co.name,
+            "name_cn": co.name_cn, "company_type": co.company_type,
+            **info,
+        })
+
+    # 计算各区间涨跌幅（从 MarketData）
+    if core:
+        core_ids = [c["id"] for c in core]
+        all_md = (db.query(MarketData)
+                  .filter(MarketData.company_id.in_(core_ids), MarketData.stock_price.isnot(None))
+                  .order_by(MarketData.company_id, MarketData.date)
+                  .all())
+        md_by_cid = defaultdict(list)
+        for md in all_md:
+            md_by_cid[md.company_id].append(md)
+        for company in core:
+            cid = company["id"]
+            records = md_by_cid.get(cid, [])
+            if len(records) >= 2:
+                dates = [r.date for r in records]
+                prices = [r.stock_price for r in records]
+                latest_px = prices[-1]
+                today = dates[-1]
+                periods = {"chg_1w": 7, "chg_1m": 30, "chg_3m": 90,
+                           "chg_6m": 180, "chg_1y": 365, "chg_3y": 1095}
+                for key, days in periods.items():
+                    target = today - timedelta(days=days)
+                    idx = bisect_right(dates, target) - 1
+                    if idx >= 0:
+                        px = prices[idx]
+                        company[key] = round((latest_px - px) / px * 100, 2) if px and latest_px else None
+                    else:
+                        company[key] = None
+
+    return DashboardOverview(
+        total_companies=total_companies, total_products=total_products,
+        total_storage_products=total_storage,
+        industry_chains=chains, core_companies=core,
     )
 
 
@@ -712,6 +875,137 @@ def refresh_all_pending_returns(db: Session = Depends(get_db)):
 # =========================================================================
 
 
+# ── 边际变化计算辅助函数 ──
+
+def _get_comparison_window_days(frequency: str | None) -> int:
+    """根据更新频率返回比较窗口天数"""
+    if not frequency:
+        return 90
+    freq = frequency.lower().strip()
+    if freq in ("daily", "weekly", "日", "周"):
+        return 30
+    elif freq in ("monthly", "月"):
+        return 90
+    elif freq in ("quarterly", "季"):
+        return 90
+    else:  # annual / 年 / 不定期
+        return 365
+
+
+def _determine_comparison_window(frequency: str | None) -> str:
+    """确定比较窗口标签"""
+    if not frequency:
+        return "90d"
+    freq = frequency.lower().strip()
+    if freq in ("daily", "weekly", "日", "周"):
+        return "30d"
+    elif freq in ("monthly", "quarterly", "月", "季"):
+        return "90d"
+    else:
+        return "last_change"
+
+
+def _compute_marginal_change(db, indicator: KeyIndicator, latest: IndicatorObservation):
+    """
+    计算指标的边际变化。
+    高频(daily/weekly) → 对比30天前观测值
+    中频(monthly/quarterly) → 对比90天前观测值
+    低频(annual) → 对比最近一次观测值
+    """
+    from models import IndicatorObservation as ObsModel
+
+    window = _determine_comparison_window(indicator.update_frequency)
+
+    if window == "last_change":
+        # 对比最近一次观测值
+        prev = (
+            db.query(ObsModel)
+            .filter(
+                ObsModel.indicator_id == indicator.id,
+                ObsModel.date < latest.date,
+            )
+            .order_by(ObsModel.date.desc())
+            .first()
+        )
+        if prev and prev.value and latest.value:
+            old_val = prev.value
+            if old_val != 0:
+                latest.marginal_change_pct = round((latest.value - old_val) / old_val * 100, 2)
+                latest.comparison_window = "last_change"
+    else:
+        days = int(window.replace("d", ""))
+        cutoff = latest.date - timedelta(days=days)
+        ref_obs = (
+            db.query(ObsModel)
+            .filter(
+                ObsModel.indicator_id == indicator.id,
+                ObsModel.date >= cutoff,
+                ObsModel.date < latest.date,
+            )
+            .order_by(ObsModel.date.asc())
+            .first()
+        )
+        if ref_obs and ref_obs.value and latest.value:
+            old_val = ref_obs.value
+            if old_val != 0:
+                latest.marginal_change_pct = round((latest.value - old_val) / old_val * 100, 2)
+                latest.comparison_window = window
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+# ── 产业影响分析批量生成 ──
+
+def batch_analyze_industry_impact(db: Session):
+    """为所有缺少 industry_impact 的最新观测值调用 DeepSeek API 生成分析"""
+    from models import IndicatorObservation as ObsModel
+
+    obs_list = (
+        db.query(ObsModel)
+        .filter(
+            ObsModel.industry_impact.is_(None),
+            ObsModel.value.isnot(None),
+            ObsModel.marginal_change_pct.isnot(None),
+        )
+        .order_by(ObsModel.date.desc())
+        .limit(20)
+        .all()
+    )
+
+    updated = 0
+    for obs in obs_list:
+        ind = db.query(KeyIndicator).filter(KeyIndicator.id == obs.indicator_id).first()
+        if not ind:
+            continue
+
+        try:
+            result = ai_analysis.generate_industry_impact_analysis(
+                name_cn=ind.name_cn or ind.name,
+                category_cn=CATEGORY_CN_MAP.get(ind.category, ind.category or ""),
+                latest_value=obs.value,
+                previous_value=obs.previous_value,
+                change_pct=obs.change_pct,
+                marginal_change_pct=obs.marginal_change_pct,
+                comparison_window=obs.comparison_window,
+                unit=ind.unit or "",
+                related_tickers=ind.related_tickers or "",
+            )
+            if result:
+                obs.industry_impact = result.get("industry_impact", "")
+                obs.chain_impact = result.get("chain_impact", "")
+                obs.company_impact = result.get("company_impact", "")
+                db.commit()
+                updated += 1
+        except Exception as e:
+            logger.warning(f"Industry impact analysis failed for {ind.name}: {e}")
+            db.rollback()
+
+    return updated
+
+
 class IndustryIntelligenceIndicator(BaseModel):
     """产业情报中的指标条目"""
     id: int
@@ -736,6 +1030,16 @@ class IndustryIntelligenceIndicator(BaseModel):
     data_quality: Optional[str] = None
     analysis: Optional[str] = None
     last_updated: Optional[str] = None
+
+    # 边际变化
+    marginal_change_pct: Optional[float] = None
+    comparison_window: Optional[str] = None
+    marginal_observations: Optional[list] = None   # 窗口期内的观测值列表
+
+    # 行业/产业链/公司影响分析
+    industry_impact: Optional[str] = None
+    chain_impact: Optional[str] = None
+    company_impact: Optional[str] = None
 
     # 前后10日涨跌幅
     pre_event_returns: Optional[dict] = None
@@ -831,6 +1135,13 @@ def get_industry_intelligence(db: Session = Depends(get_db)):
             item.data_quality = latest.data_quality
             item.last_updated = str(latest.date)
 
+            # 边际变化
+            item.marginal_change_pct = latest.marginal_change_pct
+            item.comparison_window = latest.comparison_window
+            item.industry_impact = latest.industry_impact
+            item.chain_impact = latest.chain_impact
+            item.company_impact = latest.company_impact
+
             # 找上期的日期
             if latest.previous_value is not None:
                 prev_obs = (
@@ -845,57 +1156,53 @@ def get_industry_intelligence(db: Session = Depends(get_db)):
                 if prev_obs:
                     item.previous_date = str(prev_obs.date)
 
-            # ── AI 分析 ──
+            # ── 自动计算边际变化（如尚未计算） ──
+            if latest.marginal_change_pct is None and latest.value is not None:
+                _compute_marginal_change(db, ind, latest)
+
+                # 刷新
+                db.refresh(latest)
+                item.marginal_change_pct = latest.marginal_change_pct
+                item.comparison_window = latest.comparison_window
+
+            # ── 窗口期观测值（用于前端曲线） ──
+            window_days = _get_comparison_window_days(ind.update_frequency)
+            cutoff = latest.date - timedelta(days=window_days)
+            window_obs = (
+                db.query(IndicatorObservation)
+                .filter(
+                    IndicatorObservation.indicator_id == ind.id,
+                    IndicatorObservation.date >= cutoff,
+                    IndicatorObservation.date <= latest.date,
+                )
+                .order_by(IndicatorObservation.date.asc())
+                .all()
+            )
+            item.marginal_observations = [
+                {"date": str(o.date), "value": o.value}
+                for o in window_obs
+            ]
+
+            # ── 分析文本（仅从数据库读取缓存，不调用API） ──
             if latest.analysis:
                 item.analysis = latest.analysis
-            elif latest.change_pct is not None:
-                analysis_text = ai_analysis.generate_indicator_analysis(
-                    name_cn=ind.name_cn or ind.name,
-                    category_cn=CATEGORY_CN_MAP.get(ind.category, ind.category or ""),
-                    latest_value=latest.value,
-                    previous_value=latest.previous_value,
-                    change_pct=latest.change_pct,
-                    unit=ind.unit or "",
-                    source=ind.source or "",
-                )
-                if analysis_text:
-                    latest.analysis = analysis_text
-                    try:
-                        db.commit()
-                    except Exception:
-                        db.rollback()
-                    item.analysis = analysis_text
 
-            # ── ±10日涨跌幅 ──
-            if ind.related_tickers:
-                tickers = [
-                    t.strip()
-                    for t in ind.related_tickers.split(",")
-                    if t.strip()
-                ]
-                if tickers:
-                    try:
-                        # 先看 TimelineEvent 是否有缓存
-                        tl_event = None
-                        if latest:
-                            tl_event = (
-                                db.query(TimelineEvent)
-                                .filter(
-                                    TimelineEvent.indicator_observation_id == latest.id,
-                                )
-                                .first()
-                            )
-                        if tl_event and tl_event.pre_event_returns:
-                            item.pre_event_returns = tl_event.pre_event_returns
-                            item.post_event_returns = tl_event.post_event_returns
-                            item.post_event_updated = tl_event.post_event_updated
-                        else:
-                            event_dt = datetime.combine(latest.date, datetime.min.time()) if latest else datetime.now()
-                            perf = compute_relative_performance(tickers, event_dt, db)
-                            item.pre_event_returns = perf.get("pre")
-                            item.post_event_returns = perf.get("post")
-                    except Exception as e:
-                        logger.warning(f"Failed to compute returns for {ind.name}: {e}")
+            # ── ±10日涨跌幅（仅从 TimelineEvent 缓存读取，不实时拉取） ──
+            if latest and ind.related_tickers:
+                try:
+                    tl_event = (
+                        db.query(TimelineEvent)
+                        .filter(
+                            TimelineEvent.indicator_observation_id == latest.id,
+                        )
+                        .first()
+                    )
+                    if tl_event and tl_event.pre_event_returns:
+                        item.pre_event_returns = tl_event.pre_event_returns
+                        item.post_event_returns = tl_event.post_event_returns
+                        item.post_event_updated = tl_event.post_event_updated
+                except Exception as e:
+                    logger.warning(f"Failed to read returns for {ind.name}: {e}")
 
             with_data += 1
 
@@ -980,6 +1287,174 @@ def get_industry_intelligence(db: Session = Depends(get_db)):
         data_sources=data_sources,
         stats=stats,
     )
+
+
+# =========================================================================
+# 10d. 批量AI分析 & 产业数据浏览
+# =========================================================================
+
+
+@app.post("/api/industry/batch-analyze")
+def trigger_batch_analyze(db: Session = Depends(get_db)):
+    """触发批量AI分析：为所有缺少 industry_impact 的观测值生成产业链影响分析"""
+    updated = batch_analyze_industry_impact(db)
+    return {"success": True, "analyzed": updated}
+
+
+@app.get("/api/industry/sequence-timeline")
+def get_sequence_timeline(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    """
+    产业情报-序时: 纵向时间轴，每条记录显示比较值和影响解读。
+    若前值1条 → 显示前值和新值
+    若前值多条 → 显示前一条、前值中最高、前值中最低
+    """
+    # 合并采集事件和时间线事件，按时间倒序
+    tl_events = (
+        db.query(TimelineEvent)
+        .filter(TimelineEvent.event_type == "collection")
+        .order_by(TimelineEvent.event_time.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    items = []
+    for e in tl_events:
+        item = {
+            "id": e.id,
+            "event_type": e.event_type,
+            "event_time": e.event_time.isoformat() if e.event_time else None,
+            "title": e.title,
+            "description": e.description,
+            "value_display": e.value_display,
+            "source_name": e.source_name,
+            "indicator_name_cn": e.indicator_name_cn,
+            "related_tickers": e.related_tickers,
+            "related_indicators": e.related_indicators,
+            "impact_level": e.impact_level,
+            "pre_event_returns": e.pre_event_returns,
+            "post_event_returns": e.post_event_returns,
+        }
+
+        # 获取该指标的历史观测值（用于显示前值列表）
+        if e.indicator_observation_id:
+            obs = db.query(IndicatorObservation).filter(
+                IndicatorObservation.id == e.indicator_observation_id
+            ).first()
+            if obs:
+                indicator = db.query(KeyIndicator).filter(
+                    KeyIndicator.id == obs.indicator_id
+                ).first()
+                if indicator:
+                    # 获取该指标的所有历史观测值
+                    history = (
+                        db.query(IndicatorObservation)
+                        .filter(
+                            IndicatorObservation.indicator_id == indicator.id,
+                        )
+                        .order_by(IndicatorObservation.date.desc())
+                        .limit(10)
+                        .all()
+                    )
+
+                    # 构建前值列表
+                    prev_values = []
+                    for h in history:
+                        if h.id == obs.id:
+                            continue
+                        prev_values.append({
+                            "date": str(h.date),
+                            "value": h.value,
+                            "change_pct": h.change_pct,
+                        })
+
+                    # 计算前值统计
+                    if len(prev_values) == 1:
+                        item["previous_single"] = prev_values[0]
+                    elif len(prev_values) > 1:
+                        item["previous_last"] = prev_values[0]  # 前一条
+                        values_only = [p["value"] for p in prev_values if p["value"] is not None]
+                        if values_only:
+                            item["previous_max"] = max(values_only)
+                            item["previous_min"] = min(values_only)
+
+                    # 当前值
+                    item["current_value"] = obs.value
+                    item["current_date"] = str(obs.date)
+                    item["change_pct"] = obs.change_pct
+                    item["marginal_change_pct"] = obs.marginal_change_pct
+                    item["industry_impact"] = obs.industry_impact
+                    item["chain_impact"] = obs.chain_impact
+                    item["company_impact"] = obs.company_impact
+                    item["unit"] = indicator.unit
+
+        items.append(item)
+
+    return items
+
+
+@app.get("/api/industry/company-data")
+def get_company_data_browse(db: Session = Depends(get_db)):
+    """数据浏览-公司: 返回所有公司的行情和财务数据"""
+    companies = db.query(Company).all()
+
+    # 批量加载 cache 数据
+    cache_records = db.query(StockInfoCache).all()
+    cache_map = {}
+    for r in cache_records:
+        if r.ticker and isinstance(r.data_json, dict):
+            cache_map[r.ticker.upper()] = r.data_json
+
+    # 批量加载财务数据
+    fins = db.query(Financial).order_by(Financial.fiscal_year.desc()).all()
+    fin_map = defaultdict(list)
+    for f in fins:
+        fin_map[f.company_id].append(f)
+
+    result = []
+    for c in companies:
+        item = {
+            "id": c.id,
+            "name": c.name,
+            "name_cn": c.name_cn,
+            "ticker": c.ticker,
+            "company_type": c.company_type,
+            "sector": c.sector,
+            "is_listed": c.is_listed,
+        }
+
+        # 实时行情
+        if c.ticker and c.ticker.upper() in cache_map:
+            d = cache_map[c.ticker.upper()]
+            item["current_price"] = d.get("current_price")
+            item["change_pct"] = d.get("change_pct")
+            item["market_cap_b"] = d.get("market_cap_b")
+            item["pe_ttm"] = d.get("pe_ttm")
+            item["price_time"] = d.get("time")
+            item["data_source"] = d.get("source", "tencent")
+
+        # 财务数据
+        company_fins = fin_map.get(c.id, [])
+        item["financials"] = [
+            {
+                "fiscal_year": f.fiscal_year,
+                "revenue": f.revenue,
+                "net_income": f.net_income,
+                "gross_margin": f.gross_margin,
+                "operating_margin": f.operating_margin,
+                "net_margin": f.net_margin,
+                "pe": f.pe,
+                "pb": f.pb,
+                "roe": f.roe,
+                "data_source": f.data_source,
+                "last_verified": str(f.last_verified) if f.last_verified else None,
+            }
+            for f in company_fins[:5]  # 最近5年
+        ]
+
+        result.append(item)
+
+    return result
 
 
 # =========================================================================
@@ -1143,6 +1618,120 @@ def evaluate_portfolio(portfolio_id: int, db: Session = Depends(get_db)):
     return evaluation
 
 
+# ── 关注组合跟踪（基于 Follow 表，替代 Portfolio） ────────────
+
+@app.get("/api/portfolio/tracking", response_model=PortfolioTrackingData)
+def get_folio_tracking(db: Session = Depends(get_db)):
+    """基于关注公司的组合跟踪数据：实时价+期间收益+PE/EPS"""
+    follows = (db.query(Follow)
+               .options(joinedload(Follow.company))
+               .all())
+
+    if not follows:
+        return PortfolioTrackingData(
+            portfolio_id=0,
+            portfolio_name="关注组合",
+            total_weight=0.0,
+            cash_weight=100.0,
+            holdings=[],
+        )
+
+    # 获取最后更新时间
+    last_updated = None
+    latest_cache = db.query(StockInfoCache).order_by(StockInfoCache.updated_at.desc()).first()
+    if latest_cache and latest_cache.updated_at:
+        if hasattr(latest_cache.updated_at, 'strftime'):
+            last_updated = latest_cache.updated_at.strftime("%Y-%m-%d %H:%M")
+        else:
+            last_updated = str(latest_cache.updated_at)
+
+    holding_data_list = []
+    for f in follows:
+        company = f.company
+        if not company:
+            continue
+
+        cache = (db.query(StockInfoCache)
+                 .filter(StockInfoCache.ticker == company.ticker)
+                 .order_by(StockInfoCache.updated_at.desc()).first())
+        cache_data = {}
+        if cache and cache.data_json:
+            dj = cache.data_json
+            cache_data = {
+                "current_price": dj.get("current_price"),
+                "pe_ttm": dj.get("pe_ttm"),
+                "market_cap_b": dj.get("market_cap_b"),
+                "change_pct": dj.get("change_pct"),
+            }
+        else:
+            cache_data = {"current_price": None, "pe_ttm": None, "market_cap_b": None, "change_pct": None}
+
+        returns = compute_holding_returns(db, company.ticker) if company.ticker else {}
+        eps = derive_eps_metrics(company.id, company.ticker, cache_data, db)
+
+        holding_data_list.append(HoldingTrackingData(
+            holding_id=f.id,
+            company_id=company.id,
+            ticker=company.ticker or "",
+            company_name=company.name,
+            name_cn=company.name_cn,
+            weight=f.weight,
+            current_price=cache_data.get("current_price"),
+            change_pct=cache_data.get("change_pct"),
+            pe_ttm=cache_data.get("pe_ttm"),
+            market_cap_b=cache_data.get("market_cap_b"),
+            return_1d=returns.get("return_1d"),
+            return_1w=returns.get("return_1w"),
+            return_1m=returns.get("return_1m"),
+            return_3m=returns.get("return_3m"),
+            return_6m=returns.get("return_6m"),
+            return_1y=returns.get("return_1y"),
+            return_3y=returns.get("return_3y"),
+            eps_ttm=eps.get("eps_ttm"),
+            eps_2025=eps.get("eps_2025"),
+            growth_rate=eps.get("growth_rate"),
+            eps_2026e=eps.get("eps_2026e"),
+            eps_2027e=eps.get("eps_2027e"),
+            forward_pe_2026e=eps.get("forward_pe_2026e"),
+            forward_pe_2027e=eps.get("forward_pe_2027e"),
+        ))
+
+    aggregates = compute_portfolio_aggregates([d.model_dump() for d in holding_data_list])
+
+    return PortfolioTrackingData(
+        portfolio_id=0,
+        portfolio_name="关注组合",
+        last_updated=last_updated,
+        total_weight=aggregates["total_weight"],
+        cash_weight=aggregates["cash_weight"],
+        weighted_pe=aggregates.get("weighted_pe"),
+        weighted_eps_ttm=aggregates.get("weighted_eps_ttm"),
+        weighted_eps_2026e=aggregates.get("weighted_eps_2026e"),
+        weighted_eps_2027e=aggregates.get("weighted_eps_2027e"),
+        weighted_forward_pe_2026e=aggregates.get("weighted_forward_pe_2026e"),
+        weighted_forward_pe_2027e=aggregates.get("weighted_forward_pe_2027e"),
+        weighted_return_1d=aggregates.get("weighted_return_1d"),
+        weighted_return_1w=aggregates.get("weighted_return_1w"),
+        weighted_return_1m=aggregates.get("weighted_return_1m"),
+        weighted_return_3m=aggregates.get("weighted_return_3m"),
+        weighted_return_6m=aggregates.get("weighted_return_6m"),
+        weighted_return_1y=aggregates.get("weighted_return_1y"),
+        weighted_return_3y=aggregates.get("weighted_return_3y"),
+        holdings=holding_data_list,
+    )
+
+
+@app.put("/api/portfolio/weight/{follow_id}")
+def update_folio_weight(follow_id: int, req: WeightUpdateRequest, db: Session = Depends(get_db)):
+    """更新关注公司权重"""
+    folio = db.query(Follow).filter(Follow.id == follow_id).first()
+    if not folio:
+        raise HTTPException(404, "关注记录不存在")
+    folio.weight = round(max(0, min(100, req.weight)), 1)
+    db.commit()
+    return {"success": True, "follow_id": follow_id, "weight": folio.weight}
+
+
 # =========================================================================
 # 13. 综合：产业链总览数据
 # =========================================================================
@@ -1243,6 +1832,93 @@ def get_industry_overview(db: Session = Depends(get_db)):
             } for sd in supply_demand],
         })
     return result
+
+
+
+# =========================================================================
+# 13b. 用户关注（核心公司管理）
+# =========================================================================
+
+
+@app.get("/api/user/follows", response_model=list[FollowOut])
+def get_follows(db: Session = Depends(get_db)):
+    """获取用户关注的公司列表"""
+    follows = db.query(Follow).order_by(Follow.created_at).all()
+    company_ids = [f.company_id for f in follows]
+    companies = {c.id: c for c in db.query(Company).filter(Company.id.in_(company_ids)).all()} if company_ids else {}
+    result = []
+    for f in follows:
+        co = companies.get(f.company_id)
+        result.append(FollowOut(
+            id=f.id, company_id=f.company_id, created_at=f.created_at,
+            ticker=co.ticker if co else None,
+            name=co.name if co else None,
+            name_cn=co.name_cn if co else None,
+            company_type=co.company_type if co else None,
+        ))
+    return result
+
+
+@app.post("/api/user/follow/{company_id}", response_model=FollowActionResponse)
+def follow_company(company_id: int, db: Session = Depends(get_db)):
+    """关注一家公司（最多7家）"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(404, "公司不存在")
+    existing = db.query(Follow).filter(Follow.company_id == company_id).first()
+    if existing:
+        raise HTTPException(409, "该公司已被关注")
+    current_count = db.query(Follow).count()
+    if current_count >= 7:
+        raise HTTPException(400, f"最多关注7家公司，当前已关注{current_count}家")
+    follow = Follow(company_id=company_id)
+    db.add(follow)
+    db.commit()
+    db.refresh(follow)
+    return FollowActionResponse(success=True, message="关注成功", follow_count=current_count + 1)
+
+
+@app.delete("/api/user/follow/{company_id}", response_model=FollowActionResponse)
+def unfollow_company(company_id: int, db: Session = Depends(get_db)):
+    """取消关注一家公司"""
+    follow = db.query(Follow).filter(Follow.company_id == company_id).first()
+    if not follow:
+        raise HTTPException(404, "该公司未被关注")
+    db.delete(follow)
+    db.commit()
+    current_count = db.query(Follow).count()
+    return FollowActionResponse(success=True, message="已取消关注", follow_count=current_count)
+
+
+@app.post("/api/user/follows/refresh-prices")
+def refresh_follow_prices(db: Session = Depends(get_db)):
+    """批量刷新已关注公司的实时价格（调用腾讯API）"""
+    follows = db.query(Follow).all()
+    if not follows:
+        return {"success": True, "updated": 0, "errors": 0, "message": "暂无关注的公司"}
+    f_company_ids = [f.company_id for f in follows]
+    f_companies = {c.id: c for c in db.query(Company).filter(Company.id.in_(f_company_ids)).all()} if f_company_ids else {}
+    updated = 0
+    errors = 0
+    for f in follows:
+        co = f_companies.get(f.company_id)
+        if not co or not co.ticker:
+            continue
+        try:
+            live = get_stock_info(co.ticker)
+            if live and live.get("source"):
+                existing = db.query(StockInfoCache).filter(StockInfoCache.ticker == co.ticker.upper()).first()
+                if existing:
+                    existing.data_json = live
+                    existing.updated_at = date.today()
+                else:
+                    db.add(StockInfoCache(ticker=co.ticker.upper(), data_json=live, updated_at=date.today()))
+                updated += 1
+        except Exception as e:
+            logger.warning(f"刷新 {co.ticker} 价格失败: {e}")
+            errors += 1
+    db.commit()
+    return {"success": True, "updated": updated, "errors": errors}
 
 
 # =========================================================================

@@ -81,6 +81,8 @@ class IndustryChainLinkOut(BaseModel):
     supply_gap_2025: Optional[str] = None; supply_gap_2026: Optional[str] = None; supply_gap_2027: Optional[str] = None
     key_drivers: Optional[str] = None; risks: Optional[str] = None
     sort_order: Optional[int] = 0
+    data_source: Optional[str] = None
+    last_verified: Optional[date] = None
     model_config = {"from_attributes": True}
 
 class CompanyChainLinkOut(BaseModel):
@@ -88,6 +90,8 @@ class CompanyChainLinkOut(BaseModel):
     market_share: Optional[float] = None; revenue_share: Optional[float] = None
     is_leader: bool = False; competitive_advantage: Optional[str] = None
     notes: Optional[str] = None
+    data_source: Optional[str] = None
+    last_verified: Optional[date] = None
     company: Optional[CompanyOut] = None
     chain_link: Optional[IndustryChainLinkOut] = None
     model_config = {"from_attributes": True}
@@ -108,6 +112,8 @@ class FinancialOut(BaseModel):
     ev_ebitda: Optional[float] = None; roe: Optional[float] = None
     debt_equity: Optional[float] = None; dividend_yield: Optional[float] = None
     pe_ttm: Optional[float] = None; ps_ttm: Optional[float] = None
+    data_source: Optional[str] = None
+    last_verified: Optional[date] = None
     model_config = {"from_attributes": True}
 
 
@@ -138,6 +144,11 @@ class IndicatorObservationOut(BaseModel):
     id: int; indicator_id: int; date: date; value: float
     previous_value: Optional[float] = None; change_pct: Optional[float] = None
     note: Optional[str] = None; data_quality: Optional[str] = None
+    marginal_change_pct: Optional[float] = None
+    comparison_window: Optional[str] = None
+    industry_impact: Optional[str] = None
+    chain_impact: Optional[str] = None
+    company_impact: Optional[str] = None
     model_config = {"from_attributes": True}
 
 class IndicatorDetail(KeyIndicatorOut):
@@ -257,6 +268,76 @@ class PortfolioDetail(PortfolioOut):
     holdings: list[PortfolioHoldingOut] = []
     performances: list[PortfolioPerformanceOut] = []
     evaluations: list[PortfolioEvaluationOut] = []
+
+
+# ---------- 组合跟踪 ───────────────────────────────────────────
+
+class HoldingTrackingData(BaseModel):
+    """单个持仓的实时跟踪数据"""
+    holding_id: int
+    company_id: int
+    ticker: str
+    company_name: str
+    name_cn: Optional[str] = None
+    weight: float               # 当前目标权重
+    current_price: Optional[float] = None
+    change_pct: Optional[float] = None
+    pe_ttm: Optional[float] = None
+    market_cap_b: Optional[float] = None
+
+    # 期间涨跌幅
+    return_1d: Optional[float] = None
+    return_1w: Optional[float] = None
+    return_1m: Optional[float] = None
+    return_3m: Optional[float] = None
+    return_6m: Optional[float] = None
+    return_1y: Optional[float] = None
+    return_3y: Optional[float] = None
+
+    # EPS & 前瞻 PE
+    eps_ttm: Optional[float] = None
+    eps_2025: Optional[float] = None
+    growth_rate: Optional[float] = None
+    eps_2026e: Optional[float] = None
+    eps_2027e: Optional[float] = None
+    forward_pe_2026e: Optional[float] = None
+    forward_pe_2027e: Optional[float] = None
+
+
+class PortfolioTrackingData(BaseModel):
+    """组合级汇总跟踪数据"""
+    portfolio_id: int
+    portfolio_name: str
+    last_updated: Optional[str] = None
+
+    # 权重
+    total_weight: float
+    cash_weight: float
+
+    # 组合加权指标
+    weighted_pe: Optional[float] = None
+    weighted_eps_ttm: Optional[float] = None
+    weighted_eps_2026e: Optional[float] = None
+    weighted_eps_2027e: Optional[float] = None
+    weighted_forward_pe_2026e: Optional[float] = None
+    weighted_forward_pe_2027e: Optional[float] = None
+
+    # 组合期间加权涨跌幅
+    weighted_return_1d: Optional[float] = None
+    weighted_return_1w: Optional[float] = None
+    weighted_return_1m: Optional[float] = None
+    weighted_return_3m: Optional[float] = None
+    weighted_return_6m: Optional[float] = None
+    weighted_return_1y: Optional[float] = None
+    weighted_return_3y: Optional[float] = None
+
+    # 持仓明细
+    holdings: list[HoldingTrackingData] = []
+
+
+class WeightUpdateRequest(BaseModel):
+    """权重更新请求"""
+    weight: float
 
 
 # ---------- 估值模型 ─────────────────────────────────────────────
@@ -425,3 +506,43 @@ class FuturePEComparisonResultOut(BaseModel):
     peer_group_cn: str
     companies: list[FuturePEValuationResultOut]
     params: dict
+
+
+# ---------- 用户关注（核心公司）────────────────────────────────────
+
+class FollowOut(BaseModel):
+    id: int
+    company_id: int
+    weight: float = 0.0
+    created_at: Optional[datetime] = None
+    ticker: Optional[str] = None
+    name: Optional[str] = None
+    name_cn: Optional[str] = None
+    company_type: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
+class IndustryChainCard(BaseModel):
+    """产业链卡片聚合数据"""
+    company_type: str
+    name_cn: str
+    company_count: int
+    avg_change_pct: Optional[float] = None
+    total_revenue_ttm: Optional[float] = None
+    total_net_income_ttm: Optional[float] = None
+    total_market_cap: Optional[float] = None
+
+
+class DashboardOverview(BaseModel):
+    """市场概览页面聚合数据"""
+    total_companies: int
+    total_products: int
+    total_storage_products: int
+    industry_chains: list[IndustryChainCard]
+    core_companies: list[dict]
+
+
+class FollowActionResponse(BaseModel):
+    success: bool
+    message: str
+    follow_count: int

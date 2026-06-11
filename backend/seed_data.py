@@ -1,13 +1,9 @@
 """Seed database with AI chip industry chain data."""
-import random
-from datetime import date, timedelta, datetime
+from datetime import date
 from database import SessionLocal, engine, Base
 from models import (
-    Company, Product, ProductMetric, MarketData, StorageProduct,
-    IndustryChainLink, CompanyChainLink, Financial, SupplyDemand,
-    KeyIndicator, IndicatorObservation, Forecast, JudgmentLog,
-    ScoringDimension, CompanyScore, Portfolio, PortfolioHolding,
-    PortfolioPerformance, PortfolioEvaluation,
+    Company, IndustryChainLink, CompanyChainLink,
+    KeyIndicator, ScoringDimension,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -107,6 +103,11 @@ def seed():
         ("Marvell", "迈威尔科技", "MRVL", "networking", "网络 / 互联 / 存储", "AI网络互联芯片(DSP/CXL/Switch)领导者", True, 60, 8000),
         ("Arista", "Arista", "ANET", "networking", "网络交换机", "AI数据中心高速交换机领导者", True, 70, 6000),
         ("Cisco", "思科", "CSCO", "networking", "网络设备", "全球网络设备巨头，AI网络安全/交换机", True, 540, 90000),
+
+        # ===== AI服务器集成 (3) =====
+        ("Dell", "戴尔", "DELL", "cloud", "服务器 / 存储", "AI服务器全球领先，PowerEdge AI优化服务器", True, 880, 120000),
+        ("HPE", "慧与", "HPE", "cloud", "服务器 / 云", "HPE Cray AI超级计算机，GreenLake云平台", True, 290, 60000),
+        ("Super Micro", "超微电脑", "SMCI", "cloud", "服务器 / 存储", "AI服务器高性价比方案，液冷技术领先", True, 150, 5000),
     ]
 
     company_map = {}
@@ -120,7 +121,7 @@ def seed():
     chains_data = [
         ("ai_chip_design", "AI芯片设计", 1,
          "AI加速器/GPGPU架构设计，包括GPU、AI ASIC、NPU等",
-         800, 1200, 1800, 50.0,
+         0, 0, 0, None,
          "极高 - 需要顶尖架构设计团队、CUDA生态壁垒、数十亿美元研发投入",
          "高",
          "供不应求，H100/B200交货周期长达36周",
@@ -131,7 +132,7 @@ def seed():
 
         ("wafer_fab", "晶圆制造", 2,
          "先进制程晶圆代工(7nm/5nm/3nm/2nm)，AI芯片制造核心环节",
-         1200, 1600, 2200, 35.0,
+         0, 0, 0, None,
          "极高 - 资本开支超200亿美元/厂、5年建设周期、台积电垄断",
          "极高",
          "3nm/5nm产能满载(>100%)，2025年扩产有限",
@@ -142,7 +143,7 @@ def seed():
 
         ("hbm_memory", "HBM高带宽存储", 3,
          "HBM(High Bandwidth Memory)制造，AI芯片关键配套",
-         250, 450, 750, 73.0,
+         0, 0, 0, None,
          "高 - 需要先进封装技术、TSV工艺、与晶圆厂深度绑定",
          "极高",
          "HBM3E供应极度紧张，SK海力士领先",
@@ -153,7 +154,7 @@ def seed():
 
         ("advanced_packaging", "先进封装", 4,
          "CoWoS/3D封装等先进封装技术，AI芯片集成的关键环节",
-         150, 250, 400, 63.0,
+         0, 0, 0, None,
          "高 - CoWoS产能稀缺、良率爬坡缓慢、认证周期长",
          "极高",
          "CoWoS产能严重不足，台积电急扩产",
@@ -164,7 +165,7 @@ def seed():
 
         ("eda_ip", "EDA/IP设计工具", 5,
          "芯片设计自动化工具和IP授权",
-         200, 230, 270, 16.0,
+         0, 0, 0, None,
          "极高 - 三大EDA巨头垄断，生态壁垒极高",
          "低",
          "EDA供应稳定，AI设计工具需求增长",
@@ -175,7 +176,7 @@ def seed():
 
         ("semiconductor_equipment", "半导体设备", 6,
          "晶圆制造和封装测试设备，扩产的瓶颈",
-         1100, 1300, 1600, 20.0,
+         0, 0, 0, None,
          "极高 - EUV光刻机ASML独家、刻蚀/沉积设备集中度高",
          "高",
          "EUV光刻机交付期12-18个月",
@@ -186,7 +187,7 @@ def seed():
 
         ("ai_server_integration", "AI服务器集成", 7,
          "AI服务器集成制造与云服务部署",
-         600, 900, 1400, 53.0,
+         0, 0, 0, None,
          "中等 - 系统集成门槛相对较低，但GPU获取是关键瓶颈",
          "低",
          "GPU供应紧张限制服务器出货",
@@ -285,97 +286,15 @@ def seed():
             ccl = CompanyChainLink(
                 company_id=company_map[comp_name].id,
                 chain_link_id=chain_map[chain_name].id,
-                market_share=share, revenue_share=rev_share,
-                is_leader=leader, competitive_advantage=advantage,
+                market_share=0, revenue_share=0,
+                is_leader=False, competitive_advantage="",
             )
             db.add(ccl)
 
-    # ── Financials (2023-2025 actual, company-specific data) ────
-    # (revenue, net_income, pe_ttm, ps_ttm)
-    fin_data = {
-        "NVIDIA": [(2023, 609, 126, 55, 18), (2024, 1305, 530, 48, 15), (2025, 1650, 720, 55, 18)],
-        "AMD": [(2023, 227, 16, 25, 8), (2024, 258, 32, 22, 7), (2025, 310, 48, 25, 8)],
-        "Intel": [(2023, 542, 17, 35, 2), (2024, 531, 15, 30, 2.5), (2025, 560, 20, 35, 2)],
-        "TSMC": [(2023, 695, 265, 20, 10), (2024, 760, 295, 22, 11), (2025, 880, 340, 25, 15)],
-        "ASML": [(2023, 285, 80, 35, 12), (2024, 300, 82, 38, 12), (2025, 350, 95, 40, 12)],
-        "SK Hynix": [(2023, 250, 18, 35, 3), (2024, 420, 95, 15, 5), (2025, 560, 150, 15, 6)],
-        "Samsung": [(2023, 520, 35, 25, 2), (2024, 580, 55, 22, 2), (2025, 680, 80, 20, 2)],
-        "Micron": [(2023, 155, -5, 0, 3), (2024, 215, 32, 12, 4), (2025, 280, 58, 12, 4)],
-        "Broadcom": [(2023, 358, 140, 25, 8), (2024, 420, 165, 28, 9), (2025, 510, 200, 30, 10)],
-        "Qualcomm": [(2023, 420, 95, 15, 5), (2024, 440, 100, 16, 5), (2025, 470, 105, 18, 5)],
-        "Applied Materials": [(2023, 265, 68, 18, 5), (2024, 278, 72, 20, 5), (2025, 310, 80, 22, 6)],
-        "Lam Research": [(2023, 175, 46, 18, 4), (2024, 182, 48, 20, 5), (2025, 200, 52, 20, 5)],
-        "Apple": [(2023, 3830, 970, 28, 8), (2024, 3910, 937, 30, 8), (2025, 4100, 980, 30, 8)],
-        "Google": [(2023, 3070, 738, 20, 6), (2024, 3500, 800, 22, 6), (2025, 3800, 870, 22, 6)],
-        "Amazon": [(2023, 5740, 304, 50, 3), (2024, 6200, 485, 45, 3), (2025, 6800, 560, 40, 3)],
-        "Microsoft": [(2023, 2120, 720, 28, 10), (2024, 2500, 830, 30, 10), (2025, 2700, 900, 32, 10)],
-        "Meta": [(2023, 1350, 390, 20, 7), (2024, 1600, 500, 22, 8), (2025, 1800, 560, 25, 8)],
-        "Tesla": [(2023, 970, 150, 60, 10), (2024, 980, 145, 65, 10), (2025, 1050, 165, 70, 10)],
-        "Tencent": [(2023, 780, 215, 18, 6), (2024, 860, 240, 20, 6), (2025, 930, 265, 20, 6)],
-        "Alibaba": [(2023, 1250, 115, 12, 2), (2024, 1300, 135, 14, 2), (2025, 1400, 150, 15, 2)],
-        "Baidu": [(2023, 176, 35, 10, 2), (2024, 185, 38, 11, 2), (2025, 195, 42, 12, 2)],
-        "Tokyo Electron": [(2023, 175, 42, 20, 5), (2024, 200, 48, 22, 5), (2025, 220, 52, 22, 5)],
-        "KLA": [(2023, 105, 30, 22, 6), (2024, 125, 35, 25, 7), (2025, 140, 40, 25, 7)],
-        "Synopsys": [(2023, 68, 16, 50, 14), (2024, 82, 20, 55, 15), (2025, 92, 24, 55, 15)],
-        "Cadence": [(2023, 44, 12, 55, 16), (2024, 52, 15, 60, 18), (2025, 58, 17, 60, 18)],
-        "ARM": [(2023, 28, 5, 70, 20), (2024, 42, 9, 80, 25), (2025, 50, 12, 80, 25)],
-        "ASE": [(2023, 175, 14, 15, 2), (2024, 185, 16, 15, 2), (2025, 198, 18, 15, 2)],
-        "Amkor": [(2023, 61, 5, 18, 3), (2024, 65, 5, 18, 3), (2025, 72, 6, 18, 3)],
-        "SMIC": [(2023, 60, 8, 35, 7), (2024, 63, 7, 40, 8), (2025, 70, 9, 40, 8)],
-        "Marvell": [(2023, 55, -1, 0, 5), (2024, 60, 4, 30, 8), (2025, 72, 8, 25, 8)],
-        "Arista": [(2023, 58, 17, 35, 10), (2024, 70, 22, 38, 12), (2025, 82, 26, 40, 12)],
-        "Cisco": [(2023, 530, 110, 15, 3), (2024, 540, 115, 15, 3), (2025, 550, 115, 15, 3)],
-        "Oracle": [(2023, 500, 85, 22, 6), (2024, 530, 95, 25, 6), (2025, 560, 100, 25, 6)],
-        "Xiaomi": [(2023, 370, 25, 22, 2), (2024, 400, 30, 25, 2), (2025, 420, 33, 25, 2)],
-        "Meituan": [(2023, 380, 18, 20, 3), (2024, 420, 25, 20, 3), (2025, 450, 30, 20, 3)],
-        "Pinduoduo": [(2023, 360, 25, 15, 3), (2024, 390, 32, 15, 3), (2025, 420, 35, 15, 3)],
-        "JCET": [(2023, 36, 3, 20, 2), (2024, 40, 4, 20, 2), (2025, 45, 5, 20, 2)],
-        "Western Digital": [(2023, 120, -8, 0, 2), (2024, 125, 5, 18, 2), (2025, 130, 8, 15, 2)],
-    }
+    # ── Financials — data comes from financial_collector.py (Wind API) ──
+    # No hardcoded financial data; run `python backend/data_pipeline/financial_collector.py` to populate.
 
-    for comp_name, years_data in fin_data.items():
-        if comp_name not in company_map:
-            continue
-        cid = company_map[comp_name].id
-        for idx, (fy, rev, ni, pe_ttm, ps_ttm) in enumerate(years_data):
-            rev_growth = ((rev / years_data[idx-1][1]) - 1) * 100 if idx > 0 else 20.0
-            nm = (ni / rev) * 100 if rev else 0
-            pe = pe_ttm if pe_ttm > 0 else None
-            ps = ps_ttm
-            pb = round(ps_ttm * random.uniform(2, 5), 1)
-            roe = nm * random.uniform(0.8, 1.2) if nm > 0 else 5.0
-            ev_ebitda = round(pe_ttm * random.uniform(0.8, 1.2), 1) if pe_ttm > 0 else None
-
-            f = Financial(
-                company_id=cid, fiscal_year=fy,
-                revenue=rev, revenue_growth=round(rev_growth, 1),
-                net_income=ni, gross_margin=round(random.uniform(45, 75), 1) if comp_name in ["NVIDIA", "ASML"] else round(random.uniform(35, 60), 1),
-                operating_margin=round(random.uniform(25, 55), 1) if comp_name == "NVIDIA" else round(random.uniform(10, 35), 1),
-                net_margin=round(nm, 1),
-                eps=round(ni / random.uniform(0.5, 2.5), 2) if ni > 0 else 0,
-                pe=pe, pb=pb, ps=ps,
-                pe_ttm=pe_ttm, ps_ttm=ps_ttm,
-                ev_ebitda=ev_ebitda,
-                roe=round(roe, 1), debt_equity=round(random.uniform(0.1, 0.8), 2),
-                dividend_yield=round(random.uniform(0, 1.5), 2),
-            )
-            db.add(f)
-
-    # ── Supply-Demand ──────────────────────────────────────────
-    for chain_name in ["ai_chip_design", "wafer_fab", "hbm_memory", "advanced_packaging"]:
-        clid = chain_map[chain_name].id
-        for period, supply, demand, gap, util, lead in [
-            ("2025", 80, 100, -20, 98, 36),
-            ("2026E", 95, 115, -17, 95, 30),
-            ("2027E", 115, 130, -12, 90, 24),
-        ]:
-            sd = SupplyDemand(
-                chain_link_id=clid, period=period,
-                supply=supply, demand=demand, unit="%",
-                gap_pct=gap, gap_description=f"供需缺口{abs(gap)}%",
-                capacity_utilization=util, lead_time_weeks=lead,
-            )
-            db.add(sd)
+    # ── Supply-Demand — data comes from data pipeline (to be implemented) ──
 
     # ── Key Indicators (Expanded: 24 indicators with real trackable sources) ──
     indicators_data = [
@@ -565,124 +484,11 @@ def seed():
         db.add(ki); db.flush()
         indicator_map[name] = ki
 
-    # ── Indicator Observations (expanded) ──────────────────────
-    today = date(YEAR, 6, 10)
-    obs_specs = [
-        ("hbm3e_price", [(30, 28), (25, 26), (20, 25), (15, 24), (10, 22), (5, 21), (0, 20)]),
-        ("ddr5_spot_price", [(30, 4.5), (25, 4.2), (20, 4.0), (15, 3.8), (10, 3.5), (5, 3.3), (0, 3.1)]),
-        ("nand_spot_price", [(30, 2.8), (25, 2.6), (20, 2.5), (15, 2.4), (10, 2.3), (5, 2.2), (0, 2.1)]),
-        ("h100_lease_price", [(30, 3.5), (20, 3.2), (10, 2.8), (0, 2.5)]),
-        ("a100_secondhand_price", [(60, 18000), (45, 16500), (30, 15000), (15, 13500), (0, 12500)]),
-        ("coWoS_capacity", [(365, 8), (270, 12), (180, 15), (90, 20), (0, 28)]),
-        ("sox_index", [(30, 4800), (25, 4950), (20, 5100), (15, 5200), (10, 5350), (5, 5400), (0, 5280)]),
-        ("semiconductor_sales", [(180, 480), (150, 500), (120, 520), (90, 535), (60, 550), (30, 560), (0, 565)]),
-        ("semiconductor_book_to_bill", [(180, 0.95), (150, 0.98), (120, 1.02), (90, 1.05), (60, 1.08), (30, 1.06), (0, 1.04)]),
-        ("china_semiconductor_import", [(180, 310), (150, 325), (120, 340), (90, 355), (60, 370), (30, 380), (0, 390)]),
-        ("gpu_lead_time", [(30, 36), (25, 34), (20, 32), (15, 30), (10, 28), (5, 26), (0, 24)]),
-        ("euv_delivery", [(540, 8), (450, 10), (360, 12), (270, 11), (180, 14), (90, 13), (0, 15)]),
-        ("chip_design_startup", [(360, 680), (270, 720), (180, 780), (90, 820), (0, 850)]),
-        ("nvidia_dc_revenue", [(540, 145), (450, 181), (360, 221), (270, 260), (180, 310), (90, 355), (0, 380)]),
-        ("tsmc_monthly_revenue", [(180, 2100), (150, 2200), (120, 2300), (90, 2400), (60, 2500), (30, 2450), (0, 2600)]),
-        ("sk_hynix_hbm_ratio", [(360, 25), (270, 35), (180, 45), (90, 50), (0, 55)]),
-        ("datacenter_capex", [(540, 420), (450, 460), (360, 510), (270, 560), (180, 620), (90, 680), (0, 720)]),
-        ("amd_dc_revenue", ((540, 16), (450, 23), (360, 31), (270, 38), (180, 42), (90, 48), (0, 52))),
-        ("ai_llm_training_cost", [(720, 100), (540, 150), (360, 200), (180, 250), (0, 300)]),
-        ("chip_advance_node_yeild", [(360, 55), (270, 60), (180, 65), (90, 70), (0, 75)]),
-        ("ai_inference_efficiency", [(180, 15), (90, 8), (60, 5), (30, 3.5), (0, 2.5)]),
-        ("semiconductor_etf_flow", [(30, -120), (25, 80), (20, 350), (15, 420), (10, 280), (5, -50), (0, 180)]),
-        ("ai_search_trend", [(30, 75), (25, 78), (20, 82), (15, 85), (10, 88), (5, 90), (0, 92)]),
-    ]
+    # ── Indicator Observations — data comes from data pipeline (to be implemented) ──
 
-    for ind_name, obs_data in obs_specs:
-        kid = indicator_map[ind_name].id
-        sorted_obs = sorted(obs_data, key=lambda x: x[0])
-        prev = None
-        for days_ago, val in sorted_obs:
-            d = today - timedelta(days=days_ago)
-            change = round((val - prev) / prev * 100, 1) if prev else None
-            io = IndicatorObservation(
-                indicator_id=kid, date=d, value=val,
-                previous_value=prev, change_pct=change,
-            )
-            db.add(io)
-            prev = val
+    # ── Forecasts — data comes from data pipeline (to be implemented) ──
 
-    # ── Forecasts ──────────────────────────────────────────────
-    forecast_data = [
-        ("NVIDIA", 2026, 2200, 33, 30, 12, 66000, "高端GPU仍供不应求，2026H2 Blackwell放量", "高", "买入"),
-        ("NVIDIA", 2027, 3000, 36, 25, 10, 75000, "供应逐步改善但需求持续旺盛", "中", "买入"),
-        ("TSMC", 2026, 1050, 19, 20, 8, 21000, "AI先进制程满载，3nm营收占比提升", "高", "买入"),
-        ("TSMC", 2027, 1250, 19, 18, 7, 22500, "2nm量产推动持续增长", "中", "买入"),
-        ("SK Hynix", 2026, 750, 34, 15, 5, 11250, "HBM3E/HBM4领先，AI存储需求爆发", "高", "买入"),
-        ("SK Hynix", 2027, 950, 27, 12, 4, 11400, "HBM4量产推动持续增长", "中", "买入"),
-        ("ASML", 2026, 400, 14, 30, 10, 12000, "EUV需求强劲，High NA EUV交付", "高", "持有"),
-        ("ASML", 2027, 460, 15, 28, 9, 12880, "先进制程扩产持续推动设备需求", "中", "持有"),
-        ("Broadcom", 2026, 600, 18, 25, 8, 15000, "AI定制芯片+网络芯片双轮驱动", "高", "买入"),
-        ("Broadcom", 2027, 720, 20, 22, 7, 15840, "AI ASIC占比持续提升", "中", "买入"),
-        ("Google", 2026, 4200, 10, 22, 6, 25000, "TPU+Gemini驱动AI营收持续高增", "高", "买入"),
-        ("Amazon", 2026, 7500, 11, 28, 3, 22000, "AWS+AI自研芯片加速增长", "高", "买入"),
-        ("Microsoft", 2026, 3000, 11, 30, 8, 28000, "Azure AI+OpenAI生态持续扩张", "高", "买入"),
-        ("Meta", 2026, 2100, 17, 22, 7, 15000, "AI广告+LLaMA+MTIA芯片生态", "高", "买入"),
-        ("Applied Materials", 2026, 350, 13, 22, 5, 8000, "全球扩产周期持续，设备需求稳定", "中", "持有"),
-        ("AMD", 2026, 380, 23, 25, 7, 9000, "MI400加速器追赶NVIDIA", "中", "持有"),
-        ("Synopsys", 2026, 105, 14, 35, 14, 3500, "AI+EDA革命驱动设计工具需求", "高", "买入"),
-        ("ARM", 2026, 60, 20, 40, 12, 2400, "AI端侧芯片ARM架构渗透率持续提升", "高", "买入"),
-        ("ASE", 2026, 220, 11, 15, 3, 3500, "先进封装需求爆发，产能利用率提升", "中", "持有"),
-        ("Marvell", 2026, 88, 22, 30, 10, 2880, "AI网络互联芯片需求爆发", "高", "买入"),
-        ("Arista", 2026, 100, 22, 35, 12, 3500, "AI数据中心高速交换机需求强劲", "高", "买入"),
-    ]
-
-    for comp_name, ty, rev, growth, pe_est, ps_est, mcap, balance, conf, consensus in forecast_data:
-        if comp_name not in company_map:
-            continue
-        f = Forecast(
-            company_id=company_map[comp_name].id, target_year=ty,
-            revenue_est=rev, revenue_growth_est=growth,
-            pe_est=pe_est, ps_est=ps_est, market_cap_est=mcap,
-            supply_balance_note=balance, confidence=conf,
-            analyst_consensus=consensus,
-            key_assumptions="AI需求持续增长、产能扩建顺利",
-            upside_risks="需求超预期、产品竞争力提升",
-            downside_risks="出口管制、竞争加剧、需求放缓",
-        )
-        db.add(f)
-
-    # ── Judgment Logs ──────────────────────────────────────────
-    judgments_data = [
-        (today - timedelta(days=45), "SK海力士HBM4提前量产预期增强",
-         "预期HBM4量产在2026H2",
-         "HBM4有望提前至2026Q2量产，SK海力士技术领先扩大",
-         "重大", "SK Hynix,Samsung", "hbm3e_price",
-         "SK海力士宣布HBM4开发进度超预期，客户认证顺利",
-         "上调SK海力士预测营收"),
-        (today - timedelta(days=90), "台积电CoWoS产能翻倍计划超预期",
-         "预期2025年底CoWoS月产能25k",
-         "台积电宣布2025年底CoWoS月产能32k，2026年达45k",
-         "重大", "TSMC,NVIDIA", "coWoS_capacity",
-         "台积电法说会宣布大幅扩产计划",
-         "上调先进封装环节AI芯片出货量预测"),
-        (today - timedelta(days=30), "云厂商资本开支指引持续上调",
-         "预期2026年四大云厂商Capex 2500亿美元",
-         "四大云厂商指引2026年Capex超2800亿美元，AI投资不减",
-         "中等", "NVIDIA,Broadcom", "datacenter_capex",
-         "微软/谷歌/亚马逊/Meta最新财报均上调资本开支指引",
-         "维持AI板块超配建议"),
-        (today - timedelta(days=15), "HBM3E价格涨幅超预期",
-         "预期HBM3E价格持平",
-         "HBM3E合约价格环比上涨5-8%，供应持续紧张",
-         "中等", "SK Hynix,Samsung,Micron", "hbm3e_price",
-         "集邦咨询数据确认HBM3E价格上调",
-         "上调HBM相关公司盈利预测"),
-    ]
-
-    for d, title, prev, new, level, comps, inds, evidence, action in judgments_data:
-        jl = JudgmentLog(
-            date=d, title=title, description=title,
-            previous_view=prev, new_view=new,
-            impact_level=level, related_companies=comps,
-            related_indicators=inds, evidence=evidence, action_taken=action,
-        )
-        db.add(jl)
+    # ── Judgment Logs — data comes from data pipeline (to be implemented) ──
 
     # ── Scoring Dimensions ─────────────────────────────────────
     dims_data = [
@@ -700,99 +506,9 @@ def seed():
         db.add(d); db.flush()
         dim_map[name] = d
 
-    # ── Company Scores ─────────────────────────────────────────
-    score_data = {
-        "NVIDIA": {"valuation": 55, "revenue_growth": 95, "supply_demand_gap": 90, "barrier_to_entry": 95, "profit_margin": 95, "market_position": 100},
-        "SK Hynix": {"valuation": 70, "revenue_growth": 85, "supply_demand_gap": 95, "barrier_to_entry": 80, "profit_margin": 70, "market_position": 80},
-        "TSMC": {"valuation": 60, "revenue_growth": 70, "supply_demand_gap": 85, "barrier_to_entry": 100, "profit_margin": 85, "market_position": 100},
-        "ASML": {"valuation": 65, "revenue_growth": 50, "supply_demand_gap": 60, "barrier_to_entry": 100, "profit_margin": 90, "market_position": 100},
-        "Broadcom": {"valuation": 70, "revenue_growth": 75, "supply_demand_gap": 70, "barrier_to_entry": 85, "profit_margin": 85, "market_position": 75},
-        "AMD": {"valuation": 60, "revenue_growth": 55, "supply_demand_gap": 60, "barrier_to_entry": 75, "profit_margin": 50, "market_position": 45},
-        "Samsung": {"valuation": 75, "revenue_growth": 45, "supply_demand_gap": 65, "barrier_to_entry": 70, "profit_margin": 35, "market_position": 60},
-        "Micron": {"valuation": 65, "revenue_growth": 60, "supply_demand_gap": 60, "barrier_to_entry": 65, "profit_margin": 40, "market_position": 40},
-        "Applied Materials": {"valuation": 70, "revenue_growth": 40, "supply_demand_gap": 55, "barrier_to_entry": 80, "profit_margin": 65, "market_position": 65},
-        "Lam Research": {"valuation": 70, "revenue_growth": 35, "supply_demand_gap": 50, "barrier_to_entry": 75, "profit_margin": 65, "market_position": 60},
-    }
+    # ── Company Scores — data comes from data pipeline (to be implemented) ──
 
-    for comp_name, scores in score_data.items():
-        cid = company_map[comp_name].id
-        for dim_name, score in scores.items():
-            cs = CompanyScore(
-                company_id=cid, dimension_id=dim_map[dim_name].id,
-                score=score, reason="基于财务数据和行业分析",
-                date_updated=today,
-            )
-            db.add(cs)
-
-    # ── Portfolio ──────────────────────────────────────────────
-    p = Portfolio(
-        name="AI芯片龙头精选组合",
-        description="基于量化评分选出的AI芯片产业链龙头组合",
-        created_date=today - timedelta(days=60),
-        initial_capital=1000000.0, rebalance_frequency="monthly",
-        strategy_notes="聚焦估值合理+营收高增长+供需缺口大的壁垒环节龙头",
-    )
-    db.add(p); db.flush()
-
-    # ── Portfolio Holdings ─────────────────────────────────────
-    # Weight: compute normalized from weighted scores
-    holdings_spec = [
-        ("NVIDIA", 30, "AI芯片绝对龙头，CUDA生态壁垒极高，供需缺口持续"),
-        ("SK Hynix", 20, "HBM领先者，供需缺口最大环节，扩产难度极高"),
-        ("TSMC", 20, "晶圆代工垄断者，先进制程产能满载，壁垒最高"),
-        ("Broadcom", 12, "AI定制芯片+网络双轮驱动，估值合理"),
-        ("ASML", 10, "EUV垄断，设备环节壁垒最高，但增长相对稳健"),
-        ("Applied Materials", 8, "半导体设备龙头，受益于全球扩产周期"),
-    ]
-
-    total_weight = sum(w for _, w, _ in holdings_spec)
-    for comp_name, weight, reason in holdings_spec:
-        cid = company_map[comp_name].id
-        cost = random.uniform(80, 200)
-        shares_val = 1000000 * (weight / total_weight)
-        shares = shares_val / cost
-        ph = PortfolioHolding(
-            portfolio_id=p.id, company_id=cid,
-            weight=weight / total_weight * 100,
-            actual_weight=weight / total_weight * 100,
-            shares=round(shares, 2), avg_cost=cost,
-            current_price=round(cost * random.uniform(0.9, 1.3), 2),
-            market_value=round(shares_val, 2),
-            return_pct=round(random.uniform(-5, 15), 2),
-            allocation_reason=reason, date_added=today - timedelta(days=60),
-        )
-        db.add(ph)
-
-    # ── Portfolio Performance (60 days) ────────────────────────
-    val = 1000000
-    for i in range(60, 0, -1):
-        d = today - timedelta(days=i)
-        ret = random.gauss(0.003, 0.015)
-        val *= (1 + ret)
-        cum_ret = (val / 1000000 - 1) * 100
-        pp = PortfolioPerformance(
-            portfolio_id=p.id, date=d,
-            total_value=round(val, 2), cash=50000,
-            daily_return=round(ret * 100, 2),
-            cumulative_return=round(cum_ret, 2),
-            benchmark_return=round(cum_ret * random.uniform(0.7, 1.0), 2),
-            alpha=round(random.uniform(-0.2, 0.5), 2),
-            sharpe_ratio=round(random.uniform(0.5, 1.8), 2),
-            max_drawdown=round(random.uniform(3, 8), 2),
-        )
-        db.add(pp)
-
-    # ── Portfolio Evaluation ───────────────────────────────────
-    pe = PortfolioEvaluation(
-        portfolio_id=p.id, date=today,
-        summary="组合整体表现良好，AI需求持续超预期，龙头公司业绩增长强劲",
-        adjustment_suggestion="建议维持现有配置，关注HBM供需变化和云厂商Capex指引",
-        suggested_changes={"action": "hold", "details": "维持当前权重配置"},
-        risk_warnings="关注出口管制升级、HBM竞争格局变化、估值回调风险",
-        conviction_changes="对SK海力士信心增强(HBM4提前)，对ASML维持中性",
-        is_actionable=False, created_by="system",
-    )
-    db.add(pe)
+    # ── Portfolio — data comes from data pipeline (to be implemented) ──
 
     db.commit()
     db.close()

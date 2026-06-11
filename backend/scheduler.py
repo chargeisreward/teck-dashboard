@@ -1,11 +1,12 @@
 """
 定时调度器
-- 每日 6:00 / 14:00 / 22:00 自动采集全部数据源
+- 每日 6:00 / 18:00 自动采集产业数据 + DeepSeek分析
+- 每15分钟刷新关注公司实时价格
+- 每日 7:00 / 19:00 刷新公司股价/PE/市值
 - 每4小时刷新待更新的事件后涨跌幅
 """
 
 import logging
-import asyncio
 from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -15,23 +16,24 @@ logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
 
 
-def auto_collect_and_timeline():
-    """自动采集全部数据源，同步创建 TimelineEvent"""
+def auto_collect_and_analyze():
+    """自动采集全部数据源 + DeepSeek AI分析"""
     try:
         from database import SessionLocal
         from industry_collector import collect_all
 
         db = SessionLocal()
         try:
+            import asyncio
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             results = loop.run_until_complete(collect_all(db=db))
             loop.close()
 
-            # 为每个成功采集创建 TimelineEvent (复用 main.py 的逻辑)
             from models import KeyIndicator, IndicatorObservation, TimelineEvent
             from price_performance import update_timeline_returns
 
+            collected = 0
             for r in results.get("success", []):
                 try:
                     indicator_name = r.get("indicator", "")
@@ -50,6 +52,7 @@ def auto_collect_and_timeline():
                     if not obs:
                         continue
 
+                    # 检查是否已存在对应的 TimelineEvent
                     existing_tl = db.query(TimelineEvent).filter(
                         TimelineEvent.indicator_observation_id == obs.id
                     ).first()
@@ -79,6 +82,7 @@ def auto_collect_and_timeline():
                     db.add(tl)
                     db.commit()
                     db.refresh(tl)
+                    collected += 1
 
                     if tl.related_tickers:
                         try:
@@ -88,28 +92,21 @@ def auto_collect_and_timeline():
                 except Exception as e:
                     logger.warning(f"Timeline event creation failed: {e}")
 
-            logger.info(f"Auto-collect: {len(results.get('success', []))} success, {len(results.get('errors', []))} errors")
+            logger.info(f"Auto-collect: {collected} new events from {len(results.get('success', []))} indicators")
+
+            # ── DeepSeek AI 批量分析 ──
+            try:
+                from main import batch_analyze_industry_impact
+                analyzed = batch_analyze_industry_impact(db)
+                if analyzed:
+                    logger.info(f"DeepSeek analysis generated for {analyzed} indicators")
+            except Exception as e:
+                logger.warning(f"Batch analyze failed: {e}")
+
         finally:
             db.close()
     except Exception as e:
         logger.error(f"Auto-collect failed: {e}")
-
-
-def refresh_post_event_returns():
-    """刷新所有待更新的事件后涨跌幅"""
-    try:
-        from database import SessionLocal
-        from price_performance import refresh_pending_post_events
-
-        db = SessionLocal()
-        try:
-            updated = refresh_pending_post_events(db)
-            if updated:
-                logger.info(f"Refreshed post-event returns for {updated} events")
-        finally:
-            db.close()
-    except Exception as e:
-        logger.error(f"Refresh post-event returns failed: {e}")
 
 
 def refresh_company_financials():
@@ -129,26 +126,108 @@ def refresh_company_financials():
         finally:
             db.close()
 
-        # 同步最新价格到 MarketData 表
         backfill_market_data()
     except Exception as e:
         logger.error(f"Company data refresh failed: {e}")
 
 
+def refresh_follow_prices_15min():
+    """每15分钟刷新关注股票的实时价格"""
+    try:
+        from database import SessionLocal
+        from models import Follow, Company, StockInfoCache
+        from price_data import get_stock_info
+        from datetime import date
+
+        db = SessionLocal()
+        try:
+            follows = db.query(Follow).all()
+            if not follows:
+                return
+
+            company_ids = [f.company_id for f in follows]
+            companies = {
+                c.id: c
+                for c in db.query(Company).filter(Company.id.in_(company_ids)).all()
+            }
+
+            updated = 0
+            errors = 0
+            for f in follows:
+                co = companies.get(f.company_id)
+                if not co or not co.ticker:
+                    continue
+                try:
+                    live = get_stock_info(co.ticker)
+                    if live and live.get("source"):
+                        ticker_upper = co.ticker.upper()
+                        existing = db.query(StockInfoCache).filter(
+                            StockInfoCache.ticker == ticker_upper
+                        ).first()
+                        if existing:
+                            existing.data_json = live
+                            existing.updated_at = date.today()
+                        else:
+                            db.add(StockInfoCache(
+                                ticker=ticker_upper,
+                                data_json=live,
+                                updated_at=date.today(),
+                            ))
+                        updated += 1
+                except Exception as e:
+                    logger.warning(f"Price refresh failed for {co.ticker}: {e}")
+                    errors += 1
+
+            db.commit()
+            if updated:
+                logger.info(f"15min price refresh: {updated} updated, {errors} errors")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"15min price refresh failed: {e}")
+
+
+def refresh_post_event_returns():
+    """刷新所有待更新的事件后涨跌幅"""
+    try:
+        from database import SessionLocal
+        from price_performance import refresh_pending_post_events
+
+        db = SessionLocal()
+        try:
+            updated = refresh_pending_post_events(db)
+            if updated:
+                logger.info(f"Refreshed post-event returns for {updated} events")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Refresh post-event returns failed: {e}")
+
+
 def init_scheduler():
     """初始化定时调度器"""
-    # 每日 6:00, 14:00, 22:00 自动采集
+    # ── 每日 6:00, 18:00 自动采集 + DeepSeek分析 ──
     scheduler.add_job(
-        auto_collect_and_timeline,
+        auto_collect_and_analyze,
         trigger="cron",
-        hour="6,14,22",
+        hour="6,18",
         minute=0,
         id="industry_collect",
-        name="Auto collect industry data",
+        name="Auto collect + analyze industry data",
         replace_existing=True,
     )
 
-    # 每日 7:00 / 19:00 刷新公司股价/PE/市值
+    # ── 每15分钟刷新关注公司实时价格 ──
+    scheduler.add_job(
+        refresh_follow_prices_15min,
+        trigger="interval",
+        minutes=15,
+        id="refresh_prices_15min",
+        name="Refresh follow prices every 15 min",
+        replace_existing=True,
+    )
+
+    # ── 每日 7:00 / 19:00 刷新公司股价/PE/市值 ──
     scheduler.add_job(
         refresh_company_financials,
         trigger="cron",
@@ -159,7 +238,7 @@ def init_scheduler():
         replace_existing=True,
     )
 
-    # 每4小时刷新待更新的事件后涨跌幅
+    # ── 每4小时刷新待更新的事件后涨跌幅 ──
     scheduler.add_job(
         refresh_post_event_returns,
         trigger="interval",
@@ -170,4 +249,7 @@ def init_scheduler():
     )
 
     scheduler.start()
-    logger.info("Scheduler started: auto-collect at 6/14/22, refresh company data at 7/19, refresh returns every 4h")
+    logger.info(
+        "Scheduler started: auto-collect at 6/18, price refresh every 15min, "
+        "company data at 7/19, post-returns every 4h"
+    )

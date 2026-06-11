@@ -31,5 +31,9 @@ Thumbs.db
 /tmp/
 nohup.out
 
+# Backups
+*.bak
+
 # Zeabur local
 zeabur/.cache/
+.gstack/

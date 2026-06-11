@@ -133,6 +133,20 @@ export function evaluatePortfolio(id) {
   return fetch(`${API_BASE}/portfolios/${id}/evaluate`, { method: "POST" }).then((r) => r.json());
 }
 
+// ── 组合跟踪 ───────────────────────────────────────────────────
+
+export function getFolioTracking() {
+  return fetchJSON(`${API_BASE}/portfolio/tracking`);
+}
+
+export function updateFolioWeight(followId, weight) {
+  return fetch(`${API_BASE}/portfolio/weight/${followId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ weight }),
+  }).then((r) => r.json());
+}
+
 // ── 估值模型 ────────────────────────────────────────────────────
 
 export function getValuationPeerGroups() {
@@ -226,4 +240,49 @@ export function getTimeline(limit = 50, offset = 0, eventType) {
 
 export function getIndustryIntelligence() {
   return fetchJSON(`${API_BASE}/industry-intelligence`);
+}
+
+// ── 产业情报新增API ────────────────────────────────────────────
+
+export function getSequenceTimeline(limit = 50, offset = 0) {
+  const params = new URLSearchParams();
+  params.set("limit", limit);
+  params.set("offset", offset);
+  return fetchJSON(`${API_BASE}/industry/sequence-timeline?${params}`);
+}
+
+export function triggerBatchAnalyze() {
+  return fetch(`${API_BASE}/industry/batch-analyze`, { method: "POST" }).then((r) => r.json());
+}
+
+export function getCompanyDataBrowse() {
+  return fetchJSON(`${API_BASE}/industry/company-data`);
+}
+
+// ── 关注 / 核心公司 ────────────────────────────────────────────
+
+export function getFollows() {
+  return fetchJSON(`${API_BASE}/user/follows`);
+}
+
+export function followCompany(companyId) {
+  return fetch(`${API_BASE}/user/follow/${companyId}`, { method: "POST" }).then((r) => {
+    if (!r.ok) return r.json().then((e) => { throw new Error(e.detail || "关注失败"); });
+    return r.json();
+  });
+}
+
+export function unfollowCompany(companyId) {
+  return fetch(`${API_BASE}/user/follow/${companyId}`, { method: "DELETE" }).then((r) => {
+    if (!r.ok) return r.json().then((e) => { throw new Error(e.detail || "取消关注失败"); });
+    return r.json();
+  });
+}
+
+export function getDashboardOverview() {
+  return fetchJSON(`${API_BASE}/dashboard/overview`);
+}
+
+export function refreshFollowPrices() {
+  return fetch(`${API_BASE}/user/follows/refresh-prices`, { method: "POST" }).then((r) => r.json());
 }

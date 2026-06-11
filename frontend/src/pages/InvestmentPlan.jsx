@@ -46,8 +46,8 @@ const AIA_SK_HYNIX_WEIGHT = AIA_HOLDINGS[5].weight;
 
 function formatCurrency(v) {
   if (v == null || isNaN(v)) return "-";
-  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
-  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e12) return `$${(v / 1e8).toFixed(0)}亿`;    // 1T = 10000亿
+  if (v >= 1e8) return `$${(v / 1e8).toFixed(1)}亿`;     // 100M+ = 1亿+
   if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
   return `$${Number(v).toFixed(2)}`;
 }

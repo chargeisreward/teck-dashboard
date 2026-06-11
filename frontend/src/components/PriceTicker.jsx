@@ -82,7 +82,7 @@ function PriceTicker({ ticker, nameCn, compact = false }) {
       {/* 估值指标 */}
       {!compact && (
         <div style={{ display: "flex", gap: 12, marginTop: 4, fontSize: 11, color: "var(--text-secondary)" }}>
-          {mcap != null && <span>市值: ${mcap}B</span>}
+          {mcap != null && <span>市值: $${mcap.toFixed(0)}亿</span>}
           {pe != null && <span>PE(TTM): {pe}</span>}
         </div>
       )}

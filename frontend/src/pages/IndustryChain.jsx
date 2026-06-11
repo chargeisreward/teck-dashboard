@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { getIndustryOverview, getStockInfo, getPriceHistory, getCompanyFinancials } from "../api";
+import { getIndustryOverview, getStockInfo, getPriceHistory, getCompanyFinancials, getFollows, followCompany, unfollowCompany } from "../api";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell,
@@ -24,18 +24,11 @@ function formatPE(pe) {
   return `${pe.toFixed(1)}x`;
 }
 
-function formatCurrency(v) {
-  if (v == null) return "-";
-  if (v >= 1000) return `$${(v / 1000).toFixed(2)}T`;
-  if (v >= 1) return `$${v.toFixed(2)}B`;
-  return `$${(v * 1000).toFixed(0)}M`;
-}
-
 function formatMarketCap(v) {
   if (v == null) return "-";
-  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
-  if (v >= 1e8) return `$${(v / 1e8).toFixed(1)}B`;
-  return `$${(v / 1e6).toFixed(0)}M`;
+  if (v >= 1e12) return `$${(v / 1e8).toFixed(0)}亿`;   // 1T = 10000亿
+  if (v >= 1e8) return `$${(v / 1e8).toFixed(1)}亿`;    // 100M+ = 1亿+
+  return `$${(v / 1e6).toFixed(0)}M`;                    // below 100M, keep M
 }
 
 // ── 实时价格卡片 ──────────────────────────────────────────────────
@@ -261,9 +254,9 @@ function FinancialDataTable({ companyId }) {
 
   // 行式展示: 每个指标一行, 各财年一列
   const fields = [
-    { key: "revenue", label: "营收 (亿美元)", fmt: (v) => v != null ? `$${v.toFixed(1)}B` : "-" },
+    { key: "revenue", label: "营收 (亿美元)", fmt: (v) => v != null ? `$${v.toFixed(1)}亿` : "-" },
     { key: "revenue_growth", label: "营收增长率", fmt: (v) => v != null ? `${v.toFixed(1)}%` : "-" },
-    { key: "net_income", label: "净利润 (亿美元)", fmt: (v) => v != null ? `$${v.toFixed(1)}B` : "-" },
+    { key: "net_income", label: "净利润 (亿美元)", fmt: (v) => v != null ? `$${v.toFixed(1)}亿` : "-" },
     { key: "gross_margin", label: "毛利率", fmt: (v) => v != null ? `${v.toFixed(1)}%` : "-" },
     { key: "operating_margin", label: "营业利润率", fmt: (v) => v != null ? `${v.toFixed(1)}%` : "-" },
     { key: "net_margin", label: "净利率", fmt: (v) => v != null ? `${v.toFixed(1)}%` : "-" },
@@ -307,6 +300,12 @@ function FinancialDataTable({ companyId }) {
           </tbody>
         </table>
       </div>
+      {data[0]?.data_source && (
+        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 8, textAlign: "right" }}>
+          数据来源: {data[0].data_source}
+          {data[0].last_verified && <span> · 核实: {data[0].last_verified}</span>}
+        </div>
+      )}
     </div>
   );
 }
@@ -319,6 +318,36 @@ function IndustryChain() {
   const [peerCompanies, setPeerCompanies] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [follows, setFollows] = useState([]);
+  const [followLoading, setFollowLoading] = useState({});
+
+  useEffect(() => {
+    getFollows().then((data) => setFollows(data || [])).catch(() => {});
+  }, []);
+
+  const isFollowed = (companyId) => follows.some((f) => f.company_id === companyId);
+
+  const handleToggleFollow = async (companyId, e) => {
+    e.stopPropagation();
+    setFollowLoading((prev) => ({ ...prev, [companyId]: true }));
+    try {
+      if (isFollowed(companyId)) {
+        await unfollowCompany(companyId);
+        setFollows((prev) => prev.filter((f) => f.company_id !== companyId));
+      } else {
+        await followCompany(companyId);
+        const updated = await getFollows();
+        setFollows(updated || []);
+      }
+    } catch (err) {
+      const msg = (err.message || "").toLowerCase();
+      if (msg.includes("400")) alert("关注失败：最多关注 7 家公司");
+      else if (msg.includes("409")) alert("该公司已被关注");
+      else alert("操作失败，请重试");
+    } finally {
+      setFollowLoading((prev) => ({ ...prev, [companyId]: false }));
+    }
+  };
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
@@ -455,21 +484,27 @@ function IndustryChain() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
               <div className="stat-card" style={{ padding: 12 }}>
                 <div className="label">2025 市场</div>
-                <div className="value blue" style={{ fontSize: 20 }}>${ch.market_size_2025}B</div>
+                <div className="value blue" style={{ fontSize: 20 }}>${(ch.market_size_2025 * 10).toFixed(0)}亿</div>
               </div>
               <div className="stat-card" style={{ padding: 12 }}>
                 <div className="label">2026E 市场</div>
-                <div className="value green" style={{ fontSize: 20 }}>${ch.market_size_2026}B</div>
+                <div className="value green" style={{ fontSize: 20 }}>${(ch.market_size_2026 * 10).toFixed(0)}亿</div>
               </div>
               <div className="stat-card" style={{ padding: 12 }}>
                 <div className="label">2027E 市场</div>
-                <div className="value purple" style={{ fontSize: 20 }}>${ch.market_size_2027}B</div>
+                <div className="value purple" style={{ fontSize: 20 }}>${(ch.market_size_2027 * 10).toFixed(0)}亿</div>
               </div>
               <div className="stat-card" style={{ padding: 12 }}>
                 <div className="label">CAGR</div>
                 <div className="value orange" style={{ fontSize: 20 }}>{ch.growth_rate}%</div>
               </div>
             </div>
+            {ch.data_source && (
+              <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 12, padding: "6px 10px", background: "rgba(59,130,246,0.08)", borderRadius: 6, display: "inline-block" }}>
+                数据来源: {ch.data_source}
+                {ch.last_verified && <span> · 核实日期: {ch.last_verified}</span>}
+              </div>
+            )}
 
             {/* 供需缺口 */}
             <div style={{ marginBottom: 16 }}>
@@ -508,6 +543,7 @@ function IndustryChain() {
                   <thead>
                     <tr>
                       <th>公司</th>
+                      <th>关注</th>
                       <th>类型</th>
                       <th>上市</th>
                       <th>PE(TTM)</th>
@@ -536,6 +572,16 @@ function IndustryChain() {
                           onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = ""; }}
                         >
                           <td><strong>{c.name_cn || c.name}</strong>{c.name_cn && c.name !== c.name_cn ? <span style={{ color: "var(--text-secondary)", fontSize: 11, marginLeft: 4 }}>({c.name})</span> : null}{c.ticker ? <span style={{ color: "var(--text-secondary)", fontSize: 12, marginLeft: 6 }}>{c.ticker}</span> : null}</td>
+                          <td style={{ textAlign: "center" }}>
+                            <button
+                              onClick={(e) => handleToggleFollow(c.id, e)}
+                              disabled={followLoading[c.id]}
+                              className={`follow-btn ${isFollowed(c.id) ? "followed" : ""}`}
+                              title={isFollowed(c.id) ? "取消关注" : "添加为核心公司"}
+                            >
+                              {followLoading[c.id] ? "..." : isFollowed(c.id) ? "已关注" : "+ 关注"}
+                            </button>
+                          </td>
                           <td>
                             <span className="badge" style={{ background: `${TYPE_COLORS[c.company_type] || "#666"}22`, color: TYPE_COLORS[c.company_type] || "#666" }}>
                               {TYPE_LABELS[c.company_type] || c.company_type}
@@ -553,10 +599,10 @@ function IndustryChain() {
                             {c.analyst_pe_2027 ? `${c.analyst_pe_2027.toFixed(1)}x` : "-"}
                           </td>
                           <td style={{ fontWeight: c.revenue_2025_b ? 600 : 400, fontSize: 13 }}>
-                            {c.revenue_2025_b ? `$${c.revenue_2025_b.toFixed(1)}B` : "-"}
+                            {c.revenue_2025_b ? `$${(c.revenue_2025_b * 10).toFixed(0)}亿` : "-"}
                             {c.revenue_source === "tencent" && <span style={{ fontSize: 10, color: "#22c55e", marginLeft: 4 }}>●</span>}
                           </td>
-                          <td>{c.market_share}%</td>
+                          <td>{c.market_share}%{c.data_source ? <span style={{ fontSize: 10, color: "#3b82f6", marginLeft: 4, cursor: "help" }} title={c.data_source}>ⓘ</span> : null}</td>
                           <td>{c.revenue_share}%</td>
                           <td>{c.is_leader ? <span className="badge badge-green">龙头</span> : "—"}</td>
                           <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{c.competitive_advantage}</td>
@@ -568,14 +614,14 @@ function IndustryChain() {
               </div>
             </div>
 
-            {/* PE 数据来源说明 */}
+            {/* 数据来源说明 */}
             <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 16, lineHeight: 1.6, padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 6 }}>
-              <strong>数据来源：</strong>
-              <span style={{ color: "#22c55e" }}>●</span> PE(TTM) 来自腾讯财经 API 实时行情（证券数据供应商）；
-              价格/市值数据来源同上，使用前复权(qfq)方式。<br/>
-              2025年营收来自内部数据库，预测 PE（2026E/2027E）基于国际研究机构分析师一致预期。
-              PE为负值（N/A）表示该企业报告期亏损，PE指标暂不适用。
-              数据更新于 2026年6月。预测数据仅用于参考，不构成投资建议。
+              <strong>数据来源：</strong><br/>
+              <span style={{ color: "#3b82f6" }}>ⓘ</span> 市场规模: Gartner半导体排名 (2026.1)、TrendForce HBM报告、Yole先进封装行业报告、SEMI设备市场报告、IDC/Gartner AI服务器预测<br/>
+              <span style={{ color: "#22c55e" }}>●</span> PE(TTM)/市值: 腾讯财经 API 实时行情（前复权）<br/>
+              <span style={{ color: "#3b82f6" }}>ⓘ</span> 市占率: Gartner、Mercury Research、IC Insights、TrendForce、Yole Group、SEMI、Counterpoint、公司年报<br/>
+              财务数据: Wind 金融终端（已采集 24 家上市公司 2025 年报数据）<br/>
+              PE为负值（N/A）表示该企业报告期亏损。预测数据仅用于参考，不构成投资建议。
             </div>
 
             {/* 壁垒与驱动 */}

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTime, Text, Boolean, JSON
 from sqlalchemy.orm import relationship
 from database import Base
@@ -95,6 +97,8 @@ class IndustryChainLink(Base):
     key_drivers = Column(Text, nullable=True)               # 增长驱动力
     risks = Column(Text, nullable=True)                     # 风险因素
     sort_order = Column(Integer, default=0)                 # 排序
+    data_source = Column(String, nullable=True)              # 数据来源: fred_api / wind_api / tradingeconomics / world_bank / web_scrape
+    last_verified = Column(Date, nullable=True)              # 最后验证日期
 
     companies = relationship("CompanyChainLink", back_populates="chain_link")
 
@@ -110,9 +114,24 @@ class CompanyChainLink(Base):
     is_leader = Column(Boolean, default=False)              # 是否龙头
     competitive_advantage = Column(Text, nullable=True)     # 竞争优势
     notes = Column(Text, nullable=True)
+    data_source = Column(String, nullable=True)              # 数据来源
+    last_verified = Column(Date, nullable=True)              # 最后验证日期
 
     company = relationship("Company", back_populates="chain_links")
     chain_link = relationship("IndustryChainLink", back_populates="companies")
+
+
+class DataSource(Base):
+    """数据来源追踪 — 记录每行数据的完整来源链"""
+    __tablename__ = "data_sources"
+    id = Column(Integer, primary_key=True, index=True)
+    table_name = Column(String, index=True)                  # "industry_chain_links" / "company_chain_links" / "financials"
+    row_id = Column(Integer)                                 # 对应行 ID
+    source_type = Column(String)                             # "fred_api" / "tradingeconomics" / "world_bank" / "wind_api" / "web_scrape" / "alice_mkt_sizing"
+    source_detail = Column(Text, nullable=True)              # 具体描述 e.g. "FRED series INDPRO, retrieved 2026-06-11"
+    confidence = Column(String, nullable=True)               # "高" / "中" / "低"
+    collected_at = Column(DateTime, default=datetime.utcnow)  # 采集时间
+    url = Column(String, nullable=True)                      # 来源 URL (for web scraped data)
 
 
 # ── NEW: 公司财务与估值 ────────────────────────────────────────
@@ -139,6 +158,8 @@ class Financial(Base):
     dividend_yield = Column(Float, nullable=True)           # 股息率 %
     pe_ttm = Column(Float, nullable=True)                    # PE(TTM)
     ps_ttm = Column(Float, nullable=True)                    # PS(TTM)
+    data_source = Column(String, nullable=True)              # 数据来源: wind_api / fred_api / estimated
+    last_verified = Column(Date, nullable=True)              # 最后验证日期
 
     company = relationship("Company", back_populates="financials")
 
@@ -177,12 +198,19 @@ class KeyIndicator(Base):
     description = Column(Text, nullable=True)
     impact_analysis = Column(Text, nullable=True)           # 影响分析
     is_automated = Column(Boolean, default=False)           # 是否可自动采集
-    update_frequency = Column(String, nullable=True)        # 更新频率
+    update_frequency = Column(String, nullable=True)        # 更新频率: "daily"/"weekly"/"monthly"/"quarterly"/"annual"
     collection_method = Column(Text, nullable=True)         # 采集方法描述
     tier = Column(Integer, default=3)                      # 1=P0核心 2=P1重要 3=P2参考
     related_tickers = Column(String, nullable=True)        # 关联ticker "TSM,NVDA,AMD"
 
+    # 边际变化配置
+    comparison_window = Column(String, nullable=True)       # 默认比较窗口: "30d"/"90d"/"last_change"
+                                                            # daily/weekly → 30d
+                                                            # monthly/quarterly → 90d
+                                                            # quarterly+ → last_change
+
     observations = relationship("IndicatorObservation", back_populates="indicator")
+    _cached_observations = None
 
 
 class IndicatorObservation(Base):
@@ -197,6 +225,13 @@ class IndicatorObservation(Base):
     note = Column(Text, nullable=True)                      # 备注/解读
     data_quality = Column(String, nullable=True)            # 数据质量
     analysis = Column(Text, nullable=True)                 # AI生成/人工编写的一句话分析
+
+    # 边际变化分析字段
+    marginal_change_pct = Column(Float, nullable=True)      # 边际变化百分比（对比最近一次值）
+    comparison_window = Column(String, nullable=True)       # 比较窗口: "30d" / "90d" / "last_change"
+    industry_impact = Column(Text, nullable=True)          # 行业景气度影响分析（DeepSeek生成）
+    chain_impact = Column(Text, nullable=True)             # 产业链影响分析
+    company_impact = Column(Text, nullable=True)           # 重点公司影响分析
 
     indicator = relationship("KeyIndicator", back_populates="observations")
 
@@ -342,8 +377,20 @@ class PortfolioEvaluation(Base):
     conviction_changes = Column(Text, nullable=True)         # 信心变化
     is_actionable = Column(Boolean, default=False)           # 是否需要行动
     created_by = Column(String, default="system")            # 创建者
-
     portfolio = relationship("Portfolio", back_populates="evaluations")
+
+
+# ── 用户关注（核心公司）───────────────────────────────────────────
+
+class Follow(Base):
+    """用户关注的核心公司（最多7家）"""
+    __tablename__ = "follows"
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), unique=True, nullable=False)
+    weight = Column(Float, default=0.0)           # 组合目标权重 %
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    company = relationship("Company", lazy="joined")
 
 
 # ── 价格缓存 ──────────────────────────────────────────────────
