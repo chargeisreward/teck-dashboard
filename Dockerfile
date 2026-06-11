@@ -14,12 +14,14 @@ RUN npm run build
 FROM python:3.11-slim
 WORKDIR /app
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends gcc libgomp1 && rm -rf /var/lib/apt/lists/*
+# 安装系统依赖（含 numpy/pandas/akshare 编译所需）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ build-essential libgomp1 libffi-dev libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# 安装后端依赖
+# 安装后端依赖（分步安装，便于定位失败包）
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt || (echo "=== pip install failed, retrying with verbose ===" && pip install --no-cache-dir -v -r requirements.txt)
 
 # 复制后端代码（含 seed 数据库）
 COPY backend/ ./
