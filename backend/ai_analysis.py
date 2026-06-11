@@ -4,14 +4,15 @@ DeepSeek AI 分析生成模块
 """
 
 import logging
+import os
 from typing import Optional
 
 import requests
 
 logger = logging.getLogger(__name__)
 
-DEEPSEEK_API_KEY = "sk-9d3f81c3a330455e8851ff263daa1e40"
-DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 API_URL = f"{DEEPSEEK_BASE_URL}/v1/chat/completions"
 
 # 内存缓存避免同一指标同一值重复调用 DeepSeek API
