@@ -112,6 +112,7 @@ TENCENT_US_MAP = {
     "MPNGY": "usMPNGY",        # 美团 OTC
     "PDD": "usPDD",            # 拼多多
     "ASX": "usASX",            # 日月光 ASE
+    "SNDK": "usSNDK",          # SanDisk (2025 年从 WDC 分拆)
 }
 
 # 腾讯 US K线格式需要交易所后缀
@@ -145,7 +146,8 @@ TENCENT_KLINE_MAP = {
     "QCOM": "usQCOM.OQ",       # Qualcomm NASDAQ
     "SNPS": "usSNPS.OQ",       # Synopsys NASDAQ
     "UMC": "usUMC.N",          # UMC NYSE
-    "WDC": "usWDC.N",          # Western Digital NYSE
+    "WDC": "usWDC.OQ",         # Western Digital (NASDAQ, 2025年分拆闪存业务后仅剩HDD)
+    "SNDK": "usSNDK.OQ",       # SanDisk NASDAQ (2025年从WDC分拆)
     "TCEHY": "usTCEHY.OQ",     # 腾讯 ADR (OTCQX)
     "BABA": "usBABA.N",        # 阿里巴巴 NYSE
     "BIDU": "usBIDU.OQ",       # 百度 NASDAQ

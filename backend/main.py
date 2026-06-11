@@ -87,12 +87,26 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def on_startup():
-    """应用启动时初始化定时调度器"""
+    """应用启动时初始化定时调度器 + 数据迁移"""
     try:
         init_scheduler()
         logger.info("Scheduler initialized on startup")
     except Exception as e:
         logger.warning(f"Scheduler init skipped (might be dev mode): {e}")
+
+    # 启动数据迁移：确保新证券/关注/价格数据在持久化 DB 中也存在
+    try:
+        from database import SessionLocal
+        from startup_migration import run_startup_migration
+        db = SessionLocal()
+        try:
+            result = run_startup_migration(db)
+            if any(v > 0 for v in result.values()):
+                logger.info(f"Startup migration applied: {result}")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Startup migration skipped: {e}")
 
 
 app.add_middleware(

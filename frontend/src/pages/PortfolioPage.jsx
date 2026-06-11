@@ -8,7 +8,7 @@ import {
 
 const COLORS = ["#3b82f6", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#06b6d4", "#f59e0b"];
 const TICKER_COLORS = {
-  NVDA: "#3b82f6", GOOGL: "#22c55e", TSM: "#a855f7", WDC: "#f97316",
+  NVDA: "#3b82f6", GOOGL: "#22c55e", TSM: "#a855f7", WDC: "#f97316", SNDK: "#06b6d4",
 };
 
 function fmt(val, decimals = 2) {
