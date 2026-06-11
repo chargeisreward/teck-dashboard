@@ -9,4 +9,4 @@ beautifulsoup4>=4.12.0
 pandas>=2.0.0
 yfinance>=0.2.0
 akshare>=1.15.0
-FinanceDataReader>=0.9.0
+# FinanceDataReader>=0.9.0  # 暂不可用，后续有需要再启用
