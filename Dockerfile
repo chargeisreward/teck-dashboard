@@ -21,14 +21,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc libgomp1 &&
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制后端代码
+# 复制后端代码（含 seed 数据库）
 COPY backend/ ./
 
 # 复制前端构建产物
 COPY --from=frontend-build /app/frontend/dist ./static
 
+# entrypoint 脚本设为可执行
+RUN chmod +x /app/entrypoint.sh
+
 # Zeabur 默认端口 8080
 EXPOSE 8080
 
-# 启动命令
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# 默认数据库路径（Zeabur 可挂载持久卷到 /data）
+ENV DB_PATH=/data/teck_dashboard.db
+
+# 启动入口（处理 seed DB 复制后启动 uvicorn）
+CMD ["/bin/bash", "/app/entrypoint.sh"]
