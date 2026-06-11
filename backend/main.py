@@ -597,10 +597,12 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/market-data", response_model=list[MarketDataOut])
 def list_market_data(company_id: int = None, days: int = 30, db: Session = Depends(get_db)):
-    q = db.query(MarketData)
+    from datetime import timedelta
+    cutoff = date.today() - timedelta(days=days)
+    q = db.query(MarketData).filter(MarketData.date >= cutoff)
     if company_id:
         q = q.filter(MarketData.company_id == company_id)
-    q = q.order_by(MarketData.date.desc()).limit(days)
+    q = q.order_by(MarketData.date.desc())
     return q.all()
 
 

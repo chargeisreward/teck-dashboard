@@ -113,10 +113,11 @@ def refresh_post_event_returns():
 
 
 def refresh_company_financials():
-    """刷新所有链上公司的股价/PE/市值数据"""
+    """刷新所有链上公司的股价/PE/市值数据 + 同步 MarketData"""
     try:
         from database import SessionLocal
         from refresh_company_data import refresh_all_company_data
+        from backfill_market_data import backfill_market_data
 
         db = SessionLocal()
         try:
@@ -127,6 +128,9 @@ def refresh_company_financials():
                 logger.info(f"Company data refresh: {updated} updated, {errors} errors")
         finally:
             db.close()
+
+        # 同步最新价格到 MarketData 表
+        backfill_market_data()
     except Exception as e:
         logger.error(f"Company data refresh failed: {e}")
 
