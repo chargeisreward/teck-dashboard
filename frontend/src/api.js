@@ -31,7 +31,7 @@ export function getProducts(category) {
   return fetchJSON(`${API_BASE}/products${params}`);
 }
 
-export function getMarketData(companyId, days = 1100) {
+export function getMarketData(companyId, days = 90) {
   const params = new URLSearchParams();
   if (companyId) params.set("company_id", companyId);
   params.set("days", days);
@@ -168,7 +168,7 @@ export function calculateValuation(params) {
 
 // ── 价格数据 ─────────────────────────────────────────────────────
 
-export function getPriceHistory(ticker, days = 1100) {
+export function getPriceHistory(ticker, days = 90) {
   return fetchJSON(`${API_BASE}/price/${ticker}?days=${days}`);
 }
 
@@ -176,7 +176,7 @@ export function getStockInfo(ticker) {
   return fetchJSON(`${API_BASE}/stock-info/${ticker}`);
 }
 
-export function getSmartPrice(companyName, days = 1100) {
+export function getSmartPrice(companyName, days = 90) {
   return fetchJSON(`${API_BASE}/price/smart/${encodeURIComponent(companyName)}?days=${days}`);
 }
 

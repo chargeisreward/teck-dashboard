@@ -69,7 +69,7 @@ function PortfolioPage() {
       // Load 90-day price history for chart
       const tickers = track.holdings?.map((h) => h.ticker) || [];
       const historyPromises = tickers.map((t) =>
-        getPriceHistory(t, 1100).then((resp) => ({ ticker: t, data: resp.data || [] })).catch(() => ({ ticker: t, data: [] }))
+        getPriceHistory(t, 90).then((resp) => ({ ticker: t, data: resp.data || [] })).catch(() => ({ ticker: t, data: [] }))
       );
       const histories = await Promise.all(historyPromises);
       setPriceHistory(histories);
