@@ -73,7 +73,11 @@ function Companies() {
     : companies;
 
   const sorted = [...filtered].sort((a, b) => {
-    if (sortBy === "revenue") return (b.revenue_2024 || 0) - (a.revenue_2024 || 0);
+    if (sortBy === "revenue") {
+      const revA = (a.revenue_2025 != null ? a.revenue_2025 * 10 : (a.revenue_2024 || 0));
+      const revB = (b.revenue_2025 != null ? b.revenue_2025 * 10 : (b.revenue_2024 || 0));
+      return revB - revA;
+    }
     if (sortBy === "name") return a.name.localeCompare(b.name);
     return 0;
   });
@@ -89,9 +93,14 @@ function Companies() {
     value,
   }));
 
-  const totalRev = companies.reduce((s, c) => s + (c.revenue_2024 || 0), 0);
+  const totalRev = companies.reduce((s, c) => s + ((c.revenue_2025 != null ? c.revenue_2025 * 10 : (c.revenue_2024 || 0))), 0);
   const listed = companies.filter((c) => c.is_listed);
   const unlisted = companies.filter((c) => !c.is_listed);
+
+  const fmtNum = (n) => {
+    if (n == null || isNaN(n)) return "-";
+    return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  };
 
   return (
     <div>
@@ -100,7 +109,7 @@ function Companies() {
         <p>
           {companies.length} 家公司（上市 {listed.length} 家，未上市 {unlisted.length} 家）
           · 覆盖 {Object.keys(typeCounts).length} 个产业链环节
-          · 合计营收 ~${(totalRev / 100).toFixed(1)} 万亿
+          · 合计营收 ~${(totalRev / 10000).toFixed(1)} 万亿
         </p>
       </div>
 
@@ -171,6 +180,7 @@ function Companies() {
                 <th>领域</th>
                 <th>上市</th>
                 <th>2024营收(亿$)</th>
+                <th>2025营收(亿$)</th>
                 <th>员工数</th>
               </tr>
             </thead>
@@ -199,8 +209,15 @@ function Companies() {
                   </td>
                   <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>{c.sector}</td>
                   <td>{c.is_listed ? <span className="badge badge-green">上市</span> : <span className="badge badge-orange">未上市</span>}</td>
-                  <td style={{ fontWeight: c.revenue_2024 > 100 ? 600 : 400 }}>
-                    {c.revenue_2024 ? `$${c.revenue_2024}亿` : "-"}
+                  <td style={{ fontWeight: c.revenue_2024 > 100 ? 600 : 400, textAlign: "right" }}>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {c.revenue_2024 ? `$${fmtNum(c.revenue_2024)}亿` : "-"}
+                    </span>
+                  </td>
+                  <td style={{ fontWeight: c.revenue_2025 > 10 ? 600 : 400, textAlign: "right" }}>
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {c.revenue_2025 != null ? `$${fmtNum(c.revenue_2025 * 10)}亿` : "-"}
+                    </span>
                   </td>
                   <td style={{ fontSize: 12, color: "var(--text-secondary)" }}>
                     {c.employee_count ? c.employee_count.toLocaleString() : "-"}

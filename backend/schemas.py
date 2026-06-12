@@ -21,6 +21,7 @@ class CompanyCreate(CompanyBase): pass
 
 class CompanyOut(CompanyBase):
     id: int
+    revenue_2025: Optional[float] = None
     model_config = {"from_attributes": True}
 
 class ProductBase(BaseModel):

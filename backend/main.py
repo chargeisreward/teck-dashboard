@@ -327,7 +327,48 @@ def get_chain_companies(link_id: int, db: Session = Depends(get_db)):
 
 @app.get("/api/companies", response_model=list[CompanyOut])
 def list_companies(db: Session = Depends(get_db)):
-    return db.query(Company).all()
+    companies = db.query(Company).all()
+    company_ids = [c.id for c in companies]
+
+    # 读取 Financial 表中 2025 年营收(优先) + StockInfoCache 中的 revenue_b
+    fin_2025 = db.query(Financial).filter(
+        Financial.company_id.in_(company_ids),
+        Financial.fiscal_year == 2025,
+    ).all()
+    fin_map = {f.company_id: f.revenue for f in fin_2025 if f.revenue is not None}
+
+    # StockInfoCache 作为补充(已刷新的实时数据)
+    tickers = [c.ticker for c in companies if c.ticker]
+    cache_records = db.query(StockInfoCache).filter(
+        StockInfoCache.ticker.in_(tickers)
+    ).all()
+    cache_map = {}
+    for r in cache_records:
+        if isinstance(r.data_json, dict) and r.data_json.get("revenue_b") is not None:
+            cache_map[r.ticker.upper()] = r.data_json["revenue_b"]
+
+    result = []
+    for c in companies:
+        # 2025 营收: 优先 StockInfoCache(实时刷新), 其次 Financials, 最后 None
+        rev_2025 = None
+        if c.ticker and c.ticker.upper() in cache_map:
+            # cache 中 revenue_b 是 亿(100M), /10 转为 B(10亿)
+            rev_2025 = round(float(cache_map[c.ticker.upper()]) / 10, 1)
+        if rev_2025 is None and c.id in fin_map:
+            rev_2025 = round(float(fin_map[c.id]) / 10, 1) if fin_map[c.id] else None
+
+        company_out = CompanyOut(
+            id=c.id, name=c.name, name_cn=c.name_cn,
+            ticker=c.ticker, sector=c.sector,
+            description=c.description, logo_url=c.logo_url,
+            is_listed=c.is_listed, company_type=c.company_type,
+            revenue_2024=c.revenue_2024,
+            employee_count=c.employee_count,
+            revenue_2025=rev_2025,
+        )
+        result.append(company_out)
+
+    return result
 
 
 @app.get("/api/companies/{company_id}", response_model=CompanyDetail)
