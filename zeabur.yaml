@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://schema.zeabur.app/template.json
+apiVersion: zeabur.com/v1
+kind: Template
+metadata:
+  name: teck-dashboard
+spec:
+  services:
+    - name: t
+      spec:
+        volumes:
+          - id: data
+            dir: /data
