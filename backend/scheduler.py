@@ -110,11 +110,12 @@ def auto_collect_and_analyze():
 
 
 def refresh_company_financials():
-    """刷新所有链上公司的股价/PE/市值数据 + 同步 MarketData"""
+    """刷新所有链上公司的股价/PE/市值数据 + 增量价格补缺口 + 同步 MarketData"""
     try:
         from database import SessionLocal
         from refresh_company_data import refresh_all_company_data
         from backfill_market_data import backfill_market_data
+        from backfill_3y_prices import incremental_backfill_prices
 
         db = SessionLocal()
         try:
@@ -125,6 +126,14 @@ def refresh_company_financials():
                 logger.info(f"Company data refresh: {updated} updated, {errors} errors")
         finally:
             db.close()
+
+        # ── 增量价格补缺口(只追加,不覆盖) ──
+        # 设计动机: 数据 API 可能限流, 首次 bulk 失败时缺口靠调度逐步补足
+        try:
+            inc_result = incremental_backfill_prices()
+            logger.info(f"Incremental price backfill: {inc_result}")
+        except Exception as e:
+            logger.warning(f"Incremental backfill failed: {e}")
 
         backfill_market_data()
     except Exception as e:

@@ -851,8 +851,14 @@ def _read_from_cache(db, ticker: str, days: int) -> list[dict] | None:
     return None
 
 
-def _write_to_cache(db, ticker: str, data: list[dict], source: str):
-    """写入 PriceCache 表 (upsert by ticker+date)"""
+def _write_to_cache(db, ticker: str, data: list[dict], source: str, overwrite: bool = False):
+    """写入 PriceCache 表 (append by ticker+date)
+
+    overwrite=False (默认): 已存在的 (ticker, date) 不覆盖,只插入新行
+        - 适用于: 每日增量补缺口,保护首次成功抓到的数据不被新数据覆盖
+    overwrite=True: 完整 upsert,替换已有数据
+        - 适用于: 一次性 backfill 重写全表
+    """
     try:
         from models import PriceCache
         from datetime import datetime as dt
@@ -870,11 +876,13 @@ def _write_to_cache(db, ticker: str, data: list[dict], source: str):
                 .first()
             )
             if existing:
-                existing.price = d.get("price", existing.price)
-                existing.change_pct = d.get("change_pct")
-                existing.volume = d.get("volume")
-                existing.source = source
-                existing.updated_at = today
+                if overwrite:
+                    existing.price = d.get("price", existing.price)
+                    existing.change_pct = d.get("change_pct")
+                    existing.volume = d.get("volume")
+                    existing.source = source
+                    existing.updated_at = today
+                # else: skip — 已存在则不覆盖,保护首次成功的数据
             else:
                 db.add(PriceCache(
                     ticker=ticker,
