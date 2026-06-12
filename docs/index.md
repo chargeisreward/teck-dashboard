@@ -28,8 +28,10 @@
 
 | 文档 | 内容 |
 |------|------|
-| [API 参考](reference/api.md) | 全部 40+ 端点详细说明 |
-| [数据库参考](reference/database.md) | 25+ 数据表结构、关系、索引 |
+| [API 参考](reference/api.md) | 全部 59 端点详细说明 |
+| [数据库参考](reference/database.md) | 24 数据表结构、关系、索引 |
+| [前端参考](reference/frontend.md) | 13 页面组件树、路由、API 客户端模式 |
+| [配置参考](reference/configuration.md) | 全部环境变量、Docker 构建参数 |
 
 ## 概念解读
 
