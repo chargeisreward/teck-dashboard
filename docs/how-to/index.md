@@ -96,63 +96,47 @@ if clean_ticker in NEW_SOURCE_MAP:
 
 ## 如何配置一个新的行业数据采集器
 
-采集器位于 `backend/industry_collector/` 下，每个文件是一个独立模块。
+所有采集器位于 `backend/industry_collector/` 下，继承 `BaseCollector` 类。
 
 ### 步骤
 
-1. **创建采集模块** `backend/industry_collector/my_source.py`
+1. **创建采集器类** `backend/industry_collector/sources/my_source.py`
 
 ```python
 """我的数据源采集器"""
 import logging
 from datetime import datetime
-from typing import Optional
+from industry_collector.base import BaseCollector
 
 logger = logging.getLogger(__name__)
-SOURCE_NAME = "my_source"
 
-def collect() -> list[dict]:
-    """执行采集，返回指标观测值列表
+class MySourceCollector(BaseCollector):
+    source = "my_source"
+    indicator_name = "my_indicator"
+    indicator_name_cn = "我的指标"
+    unit = "%"
+    category = "foundry"
+    category_cn = "晶圆制造"
+    update_frequency = "monthly"
+    description = "指标描述"
+    source_url = "https://..."
+    collection_method = "网页爬虫"
 
-    Returns:
-        [{"indicator_name": "my_indicator",
-          "date": "2026-06-11",
-          "value": 123.4,
-          "change_pct": 2.5,
-          "note": "optional note"}, ...]
-    """
-    try:
+    async def collect(self, db=None) -> dict:
         # 采集逻辑...
-        return results
-    except Exception as e:
-        logger.error(f"my_source collect failed: {e}")
-        return []
+        # 调用 self._write_observation(db, indicator_id, value) 写入数据
+        return {"success": True, "value": value, ...}
 ```
 
-2. **在 `main.py` 中注册**
+2. **在 `__init__.py` 中注册**
 
-在 `collector_map` 字典中添加：
 ```python
-from industry_collector import my_source
-collector_map = {
-    # ... 现有 ...
-    "my_source": my_source,
-}
+from .sources.my_source import MySourceCollector
+
+COLLECTORS["my_source"] = [MySourceCollector]
 ```
 
-3. **在 `seed_data.py` 中创建对应指标**
-
-在 `seed_key_indicators()` 中添加：
-```python
-db.add(KeyIndicator(
-    name="my_indicator", name_cn="我的指标",
-    category="foundry", unit="%", source="My Source",
-    is_automated=True, update_frequency="周度",
-    tier=2, related_tickers="NVDA,TSM",
-))
-```
-
-4. **触发采集验证**
+3. **触发采集验证**
 
 ```bash
 curl -X POST "http://localhost:8001/api/industry/collect?source=my_source"
@@ -160,61 +144,32 @@ curl -X POST "http://localhost:8001/api/industry/collect?source=my_source"
 
 ---
 
-## 如何创建自定义估值场景
-
-### 使用估值 API
-
-**v1 Gordon Growth 场景：**
-
-```bash
-curl -X POST "http://localhost:8001/api/valuation/calculate" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "peer_group": "gpu_ai",
-    "revenue_growth": 25.0,
-    "net_margin": 40.0,
-    "discount_rate": 12.0,
-    "terminal_growth": 3.0,
-    "growth_years": 5,
-    "china_premium": 2.0
-  }'
-```
-
-参数含义：
-- `revenue_growth`: 假设的未来 5 年营收年增长率
-- `net_margin`: 稳态净利率（null = 使用当前值）
-- `discount_rate`: WACC/折现率，越高估值越低
-- `china_premium`: 中国公司国产替代溢价，加在增长率上
-
-**v2 供需感知未来PE场景：**
-
-```bash
-curl -X POST "http://localhost:8001/api/valuation-v2/calculate" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "peer_group": "memory",
-    "growth_years": 5,
-    "revenue_growth": null,
-    "net_margin": null,
-    "use_supply_demand": true
-  }'
-```
-
-参数含义：
-- `revenue_growth`: null = 使用系统推荐值（分析师→CAGR→链级增长率）
-- `use_supply_demand`: true = 启用供需分数调整增长假设
-
-### 可用的 peer_group 值
-
-`gpu_ai`, `memory`, `foundry`, `equipment`, `eda_ip`, `packaging`, `cloud`, `llm_ai`, `application`, `networking`, `other`
-
----
-
 ## 如何添加新公司到数据库
 
-### 使用 seed_data.py
+### 方法一：通过启动迁移（适合部署环境）
 
-1. 在 `seed_companies()` 函数中添加：
+修改 `backend/startup_migration.py` 中的 `TICKERS_TO_ENSURE` 字典：
+
+```python
+TICKERS_TO_ENSURE = {
+    "NEWC": {
+        "name": "New Company",
+        "name_cn": "新公司",
+        "sector": "NAND Flash",
+        "company_type": "memory",
+        "is_listed": True,
+        "description": "...",
+        "chain_link_id": 3,       # IndustryChainLink ID
+        "follow_weight": 20.0,    # 关注组合权重
+    },
+}
+```
+
+重启后端服务即可自动补入。
+
+### 方法二：使用 seed_data.py（本地开发）
+
+在 `seed_companies()` 函数中添加：
 
 ```python
 db.add(Company(
@@ -224,44 +179,17 @@ db.add(Company(
     sector="Semiconductor",
     company_type="chip_design",
     is_listed=True,
-    revenue_2024=10.5,
-    employee_count=5000,
 ))
-db.flush()  # 获取 ID
+db.flush()
 ```
 
-2. 添加到产业链环节：
+### 后续步骤
 
-```python
-db.add(CompanyChainLink(
-    company_id=new_company_id,
-    chain_link_id=foundry_link_id,  # 从 IndustryChainLink 查询
-    market_share=2.5,
-    is_leader=False,
-    competitive_advantage="差异化技术",
-))
-```
-
-3. 添加财务数据：
-
-```python
-db.add(Financial(
-    company_id=new_company_id,
-    fiscal_year=2025,
-    revenue=10.5,
-    revenue_growth=15.0,
-    net_income=2.1,
-    net_margin=20.0,
-))
-```
-
-4. 重新运行 `python seed_data.py`（注意：可能需要先清空数据或使用 upsert 逻辑）
-
-### 注意事项
-
-- `company_type` 必须使用枚举值：`chip_design` / `manufacturing` / `memory` / `equipment` / `eda` / `cloud` / `llm` / `application` / `packaging` / `networking`
-- `ticker` 对于未上市公司为 null
-- 需要同时在 `price_data.py` 的 `TENCENT_US_MAP` / `TENCENT_KLINE_MAP` 中添加 ticker 映射才能显示实时价格
+添加公司后还需：
+1. **添加到产业链环节**：`CompanyChainLink` 表
+2. **添加到实时行情映射**：`price_data.py` 的 `TENCENT_US_MAP` 和 `TENCENT_KLINE_MAP`
+3. **添加到前端颜色**：`frontend/src/pages/PortfolioPage.jsx` 的 `TICKER_COLORS`
+4. **运行 `backfill_3y_prices.py`**：补齐历史价格数据
 
 ---
 
@@ -297,40 +225,6 @@ curl -X POST "http://localhost:8001/api/judgment-logs" \
 
 ---
 
-## 如何设置一个新的投资组合
-
-### 通过种子数据
-
-在 `seed_data.py` 中添加：
-
-```python
-portfolio = Portfolio(
-    name="AI芯片精选组合",
-    description="AI芯片全产业链配置",
-    initial_capital=1000000.0,
-    rebalance_frequency="monthly",
-    strategy_notes="聚焦AI算力和存储",
-)
-db.add(portfolio)
-db.flush()
-
-holdings = [
-    PortfolioHolding(portfolio_id=portfolio.id, company_id=nvda_id, weight=30.0),
-    PortfolioHolding(portfolio_id=portfolio.id, company_id=tsm_id, weight=25.0),
-    PortfolioHolding(portfolio_id=portfolio.id, company_id=skhynix_id, weight=20.0),
-]
-for h in holdings:
-    db.add(h)
-```
-
-### 后续
-
-- 系统自动跟踪组合表现（通过 `scheduler.py` 定时更新）
-- 通过 `POST /api/portfolios/{id}/evaluate` 获取 AI 调仓建议
-- 前端"模拟组合"页面显示全部指标
-
----
-
 ## 如何排查常见问题
 
 ### 后端启动失败
@@ -340,23 +234,24 @@ for h in holdings:
 lsof -i :8001
 # 检查数据库文件
 ls -l backend/teck_dashboard.db
-# 重新初始化
-cd backend && python seed_data.py
+# 检查启动迁移日志
+tail -20 backend/server.log | grep -i "startup"
 ```
 
 ### 价格数据为空
 
-1. 检查 `price_data.py` 中的 ticker 映射
+1. 检查 `price_data.py` 中的 ticker 映射（`TENCENT_US_MAP` / `TENCENT_KLINE_MAP`）
 2. 腾讯财经 API 需要正确的交易所后缀（.N / .OQ / .AM）
 3. 查看 `backend/server.log` 中是否有 API 限流日志
 4. 韩国股票检查 Naver API 返回值
+5. 运行 `python backfill_3y_prices.py` 回填历史数据
 
 ### akshare 连接失败
 
 ```bash
 # 检查网络
 pip install akshare --upgrade
-# akshare 依赖 cninfo 等源，可能需要国内网络环境
+# akshare 依赖国内数据源，可能需要国内网络环境
 ```
 
 ### DeepSeek AI 分析不生成
@@ -368,3 +263,10 @@ curl https://api.deepseek.com/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model": "deepseek-chat", "messages": [{"role": "user", "content": "test"}]}'
 ```
+
+### 组合跟踪页面无数据
+
+1. 检查 `Follow` 表是否有记录：`GET /api/user/follows`
+2. 检查 `PriceCache` 表是否有日频数据
+3. 检查 `StockInfoCache` 是否有 `current_price` 和 `pe_ttm`
+4. 运行 `python backfill_3y_prices.py` 补齐历史价格

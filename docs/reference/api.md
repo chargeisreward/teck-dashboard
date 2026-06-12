@@ -46,6 +46,10 @@
 
 公司预测数据（分析师一致预期）。
 
+### `GET /api/stock/{ticker}`
+
+指定 ticker 的完整股票信息（多源获取，含实时价、PE、市值等）。
+
 ---
 
 ## 产业链
@@ -150,6 +154,10 @@ A 股涨跌榜（`akshare stock_zh_a_spot_em()`）。
 
 所有数据源及其状态。
 
+### `GET /api/industry/refresh`
+
+触发全量数据采集（所有采集器运行 + 产业链数据 + MarketData 同步）。返回采集统计。
+
 ---
 
 ## 产业情报（统一接口）
@@ -191,6 +199,14 @@ A 股涨跌榜（`akshare stock_zh_a_spot_em()`）。
 
 时间线事件列表。支持分页和按事件类型筛选（judgment / collection）。
 
+### `POST /api/timeline/{event_id}/refresh-returns`
+
+刷新单个时间线事件的关联证券涨跌幅。
+
+### `POST /api/timeline/refresh-pending`
+
+刷新所有待更新的事件后涨跌幅。
+
 ---
 
 ## 判断日志
@@ -221,6 +237,18 @@ A 股涨跌榜（`akshare stock_zh_a_spot_em()`）。
 
 ---
 
+## 关注组合
+
+### `GET /api/user/follows`
+
+返回所有关注公司的实时数据（ticker、价格、PE_TTM、市值、当日涨跌幅、各期间收益等）。
+
+### `POST /api/user/follow/refresh-prices`
+
+批量刷新所有关注公司的实时价格（调用腾讯 API + 写入 StockInfoCache）。
+
+---
+
 ## 投资组合
 
 ### `GET /api/portfolios`
@@ -246,6 +274,28 @@ A 股涨跌榜（`akshare stock_zh_a_spot_em()`）。
 ### `POST /api/portfolios/{id}/evaluate`
 
 触发组合 AI 评估。返回评估建议。
+
+### `GET /api/portfolio/tracking`
+
+组合完整跟踪数据，包含：
+- 每只持仓的实时价、涨跌幅、PE_TTM
+- 7 段期间涨跌幅（1日/1周/1月/3月/6月/1年/3年）
+- EPS_TTM、EPS 增速、2026E/2027E EPS、前瞻 PE
+- 组合级加权汇总（加权 PE、加权 EPS、加权各期间收益）
+
+### `PUT /api/portfolio/weight/{follow_id}`
+
+更新单个持仓的关注权重。
+
+**请求体:** `{"weight": 25.0}`
+
+### `POST /api/portfolio/rebalance`
+
+按最新权重和价格重算组合仓位。
+
+### `POST /api/portfolio/seed`
+
+手动播种默认组合（AI Chip Core Portfolio）。
 
 ---
 

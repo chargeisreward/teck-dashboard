@@ -38,5 +38,8 @@ EXPOSE 8080
 # 默认数据库路径（Zeabur 可挂载持久卷到 /data）
 ENV DB_PATH=/data/teck_dashboard.db
 
+# 声明 /data 为持久卷（Zeabur 部署时挂载,数据跨 redeploy 保留）
+VOLUME /data
+
 # 启动入口（处理 seed DB 复制后启动 uvicorn）
 CMD ["/bin/bash", "/app/entrypoint.sh"]

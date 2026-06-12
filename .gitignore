@@ -39,3 +39,11 @@ nohup.out
 # Zeabur local
 zeabur/.cache/
 .gstack/
+
+# Zeabur CLI 本地副本(Windows amd64/arm64)与解压目录
+zeabur_*.zip
+zeabur_cli/
+zeabur_cli_fresh.zip
+
+# 本地 DB 备份快照(非源码)
+backups/

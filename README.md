@@ -1,6 +1,6 @@
 # AI 芯片与半导体存储产业链分析仪表盘
 
-AI 芯片与半导体产业链深度分析平台。覆盖 42+ 上市公司、10+ 产业链环节、多数据源行情、两代估值模型、14 个行业数据采集器。
+AI 芯片与半导体产业链深度分析平台。覆盖 42+ 上市公司、10+ 产业链环节、多数据源行情、两代估值模型、14 个行业数据采集器、宏观经济数据。
 
 ## 功能概览
 
@@ -20,9 +20,9 @@ AI 芯片与半导体产业链深度分析平台。覆盖 42+ 上市公司、10+
 |------|------|
 | 前端 | React 19 + Vite 8 + React Router 7 + Recharts 3 |
 | 后端 | FastAPI + SQLAlchemy 2.0 + SQLite |
-| 数据源 | 腾讯财经 API / yfinance / akshare / Naver API |
+| 数据源 | 腾讯财经 API / yfinance / akshare / Naver API / FRED API |
 | AI | DeepSeek API（指标边际变化分析） |
-| 采集器 | 14 行业数据源（NVIDIA IR、TSMC IR、TrendForce、WSTS/SIA 等） |
+| 采集器 | 14 行业数据源（NVIDIA IR、TSMC IR、TrendForce、WSTS/SIA 等）+ 宏观指标采集 |
 
 ## 快速启动
 
@@ -30,13 +30,22 @@ AI 芯片与半导体产业链深度分析平台。覆盖 42+ 上市公司、10+
 # 后端
 cd backend
 pip install -r requirements.txt
-python seed_data.py
+
+# 启动（自动初始化 + 启动迁移）
 uvicorn main:app --reload --port 8001
 
 # 前端（新终端）
 cd frontend
 npm install
 npm run dev
+```
+
+> **注意**: `seed_data.py` 已废弃，所有数据通过采集器自动填充。首次启动会自动创建数据库并运行启动迁移（`startup_migration.py`），补入 SNDK、WDC 等关注证券。
+
+如需手动回填历史价格数据：
+```bash
+cd backend
+python backfill_3y_prices.py    # 补齐 3 年复权价格
 ```
 
 前端 `http://localhost:5173`，后端 `http://localhost:8001`，API 文档 `http://localhost:8001/docs`。
@@ -49,46 +58,43 @@ npm run dev
 |------|------|
 | [教程](docs/tutorial.md) | 从零启动并探索仪表盘 |
 | [操作指南](docs/how-to/index.md) | 添加API端点、数据源、公司、估值场景 |
-| [API 参考](docs/reference/api.md) | 30+ 端点详细说明 |
-| [数据库参考](docs/reference/database.md) | 22+ 数据表结构 |
+| [API 参考](docs/reference/api.md) | 40+ 端点详细说明 |
+| [数据库参考](docs/reference/database.md) | 25+ 数据表结构 |
 | [架构概览](docs/explanation/architecture.md) | 系统设计、数据流 |
 | [估值方法论](docs/explanation/valuation.md) | Gordon Growth v1 + 供需感知 Future PE v2 |
-| [数据源策略](docs/explanation/data-sources.md) | 5 数据源切换、14 采集器 |
+| [数据源策略](docs/explanation/data-sources.md) | 多数据源切换、采集器、缓存机制 |
+| [数据获取全览](data_get.md) | 全部数据获取方式、API Key、采集调度详解 |
 
 ## 项目结构
 
 ```
 ├── backend/
-│   ├── main.py                 # FastAPI 应用（~30+ 端点）
-│   ├── models.py               # SQLAlchemy 模型（22+ 表）
-│   ├── schemas.py              # Pydantic 响应模型
-│   ├── database.py             # SQLite 连接配置
-│   ├── valuation.py            # Gordon Growth 估值引擎
-│   ├── valuation_v2.py         # 供需感知未来PE估值引擎
-│   ├── price_data.py           # 多源价格数据获取（腾讯/yfinance/akshare/Naver）
-│   ├── ai_analysis.py          # DeepSeek AI 分析生成
-│   ├── scheduler.py            # 定时采集调度
-│   ├── seed_data.py            # 种子数据初始化
-│   ├── startup_migration.py    # 启动迁移（新证券自动补入持久化DB）
-│   ├── portfolio_tracking.py   # 组合跟踪（期间收益+PE/EPS计算）
-│   ├── price_performance.py    # 相对收益表现计算
-│   └── industry_collector/     # 14 行业数据采集器
+│   ├── main.py                    # FastAPI 应用（40+ 端点）
+│   ├── models.py                  # SQLAlchemy 模型（25+ 表）
+│   ├── schemas.py                 # Pydantic 响应模型
+│   ├── database.py                # SQLite 连接配置
+│   ├── valuation.py               # Gordon Growth 估值引擎
+│   ├── valuation_v2.py            # 供需感知未来PE估值引擎
+│   ├── price_data.py              # 多源价格数据获取（腾讯/yfinance/akshare/Naver）
+│   ├── ai_analysis.py             # DeepSeek AI 分析生成
+│   ├── scheduler.py               # 定时采集调度（6任务）
+│   ├── startup_migration.py       # 启动迁移（新证券自动补入持久化DB）
+│   ├── portfolio_tracking.py      # 组合跟踪（期间收益+PE/EPS计算）
+│   ├── price_performance.py       # 相对收益表现计算
+│   ├── refresh_company_data.py    # 公司数据校验与刷新
+│   ├── backfill_3y_prices.py      # 历史复权价格回填
+│   ├── industry_collector/        # 14 行业数据采集器
+│   └── data_pipeline/             # 数据管线（宏观/财务/市场规模采集）
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx             # 路由 & 导航（10+ 页面）
-│   │   ├── api.js              # API 客户端（30+ 函数）
-│   │   ├── pages/              # 页面组件
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── IndustryChain.jsx
-│   │   │   ├── IndustryIntelligence.jsx
-│   │   │   ├── PortfolioPage.jsx
-│   │   │   ├── InvestmentPlan.jsx
-│   │   │   ├── Companies.jsx
-│   │   │   ├── TechGlossary.jsx
-│   │   │   └── ...
-│   │   └── components/         # PriceTicker, HotStocksPanel
-│   └── vite.config.js          # Vite 配置（代理 /api → :8001）
-└── docs/                       # 完整文档
+│   │   ├── App.jsx                # 路由 & 导航（10+ 页面）
+│   │   ├── api.js                 # API 客户端（40+ 函数）
+│   │   ├── pages/                 # 页面组件
+│   │   └── components/            # PriceTicker, HotStocksPanel
+│   └── vite.config.js             # Vite 配置（代理 /api → :8001）
+├── docs/                          # 完整文档（Diataxis 框架）
+├── data_get.md                    # 数据获取方式总览
+└── Dockerfile                     # Zeabur 多阶段构建
 ```
 
 ## 数据源优先级
@@ -98,7 +104,8 @@ npm run dev
 | 美股 | 腾讯财经 API | yfinance |
 | A 股 | akshare | yfinance |
 | 港股 | akshare | yfinance |
-| 韩国股 | Naver API | FinanceDataReader / yfinance |
+| 韩国股 | Naver API | yfinance |
+| 宏观 | FRED API | tedata / akshare |
 
 ## 估值模型
 
@@ -115,7 +122,7 @@ npm run dev
 | `/industry-chain` | 产业链全景 | 10 环节 + 公司详情 |
 | `/industry-intelligence` | 产业情报 | 85+ 指标 + 时间线 |
 | `/investment-plan` | TSM+EWY配置方案 | 估值模型 |
-| `/portfolio` | 模拟组合 | 组合管理 |
+| `/portfolio` | 模拟组合 | 组合管理（权重配置+期间收益+PE/EPS） |
 | `/companies` | 公司列表 | 全部公司索引 |
 | `/tech-glossary` | 技术释义全景 | AI 技术栈百科 |
 
@@ -124,4 +131,5 @@ npm run dev
 - 服务器端口 8001（后端）、5173（前端）已在 `.gitignore` 和配置中引用
 - 价格数据使用 SQLite 缓存层，API 不可用时自动回退缓存
 - 韩国股票数据通过 Naver Mobile API 获取，韩元→美元汇率取 `₩1,300/$1`
+- `seed_data.py` 已废弃；新部署请使用启动迁移 + 采集器自动填充
 - 部分 ticker（^SOX、000660.KS）在 yfinance 上有限流，腾讯 API 做首要替代

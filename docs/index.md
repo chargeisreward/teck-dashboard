@@ -28,8 +28,8 @@
 
 | 文档 | 内容 |
 |------|------|
-| [API 参考](reference/api.md) | 全部 30+ 端点详细说明 |
-| [数据库参考](reference/database.md) | 22+ 数据表结构、关系、索引 |
+| [API 参考](reference/api.md) | 全部 40+ 端点详细说明 |
+| [数据库参考](reference/database.md) | 25+ 数据表结构、关系、索引 |
 
 ## 概念解读
 
@@ -38,7 +38,13 @@
 | 文档 | 内容 |
 |------|------|
 | [估值方法论](explanation/valuation.md) | Gordon Growth v1 + 供需感知 Future PE v2 |
-| [数据源策略](explanation/data-sources.md) | 5 数据源切换、14 采集器、缓存机制 |
+| [数据源策略](explanation/data-sources.md) | 多数据源切换、14 采集器、宏观指标、缓存机制 |
+
+## 专题文档
+
+| 文档 | 内容 |
+|------|------|
+| [数据获取全览](../data_get.md) | 全部数据获取方式、API Key 管理、14 采集器、宏观数据、调度配置 |
 
 ---
 

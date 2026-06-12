@@ -105,7 +105,7 @@ function PriceTrendChart({ ticker, nameCn }) {
   useEffect(() => {
     if (!ticker) return;
     setLoading(true);
-    getPriceHistory(ticker, 90)
+    getPriceHistory(ticker, 1100)
       .then((d) => {
         const sorted = (d || []).sort((a, b) => new Date(a.date) - new Date(b.date));
         setData(sorted);

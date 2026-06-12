@@ -1,9 +1,9 @@
 # 数据库参考
 
-> SQLite 数据库文件: `backend/teck_dashboard.db`
+> SQLite 数据库文件: `backend/teck_dashboard.db`（本地) / `/data/teck_dashboard.db`（Zeabur 生产）
 > ORM: SQLAlchemy 2.0+
 > 模型定义: `backend/models.py`
-> 种子数据: `backend/seed_data.py`
+> 种子数据: 通过启动迁移 + 采集器自动填充（`seed_data.py` 已废弃）
 
 ---
 
@@ -16,7 +16,8 @@ Company ──1:N── Product ──1:N── ProductMetric
   ├──1:N── Financial
   ├──1:N── Forecast
   ├──1:N── CompanyScore
-  ├──1:N── PortfolioHolding
+  ├──1:N── Follow                           ← 关注组合
+  ├──1:N── PortfolioHolding ──N:1── Portfolio
   │
   ├──1:N── CompanyChainLink ──N:1── IndustryChainLink ──1:N── SupplyDemand
   │
@@ -31,6 +32,7 @@ ScoringDimension ──1:N── CompanyScore
 
 PriceCache          (独立缓存表)
 StockInfoCache      (独立缓存表)
+DataSource          (独立配置表)
 ```
 
 ---
@@ -53,7 +55,7 @@ StockInfoCache      (独立缓存表)
 | `revenue_2024` | Float? | 2024 年营收（亿美元） |
 | `employee_count` | Integer? | 员工数 |
 
-**关系:** products, market_data, chain_links, financials, forecasts, scores
+**关系:** products, market_data, chain_links, financials, forecasts, scores, follows
 
 ---
 
@@ -166,6 +168,19 @@ StockInfoCache      (独立缓存表)
 
 ---
 
+### Follow（关注组合）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer PK | |
+| `company_id` | FK → companies.id | |
+| `weight` | Float | 目标权重 % |
+| `created_at` | DateTime | |
+
+用于"关注组合"功能，结合 `StockInfoCache` 展示实时价格、多期间收益、EPS/前瞻PE。
+
+---
+
 ### KeyIndicator（关键指标）
 
 | 字段 | 类型 | 说明 |
@@ -198,20 +213,58 @@ StockInfoCache      (独立缓存表)
 | `previous_value` | Float? | 上期值 |
 | `change_pct` | Float? | 变化百分比 |
 | `note` | Text? | 备注 |
-| `data_quality` | String? | 数据质量 |
+| `data_quality` | String? | 数据质量（confirmed/estimated/preliminary） |
 | `analysis` | Text? | AI 生成/人工分析 |
 
 ---
 
-### Portfolio / PortfolioHolding / PortfolioPerformance / PortfolioEvaluation
+### Portfolio（投资组合）
 
-投资组合的四张表，详见 `backend/models.py:276-346`。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer PK | |
+| `name` | String | 组合名称 |
+| `description` | Text? | 描述 |
+| `initial_capital` | Float? | 初始资金 |
+| `rebalance_frequency` | String? | 再平衡频率 |
+| `strategy_notes` | Text? | 策略说明 |
+| `created_at` | DateTime | |
 
-核心字段：
-- **Portfolio**: name, initial_capital, rebalance_frequency, strategy_notes
-- **PortfolioHolding**: company_id, weight, shares, avg_cost, return_pct
-- **PortfolioPerformance**: total_value, cumulative_return, sharpe_ratio, max_drawdown
-- **PortfolioEvaluation**: summary, adjustment_suggestion, risk_warnings, conviction_changes
+### PortfolioHolding（组合持仓）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer PK | |
+| `portfolio_id` | FK → portfolios.id | |
+| `company_id` | FK → companies.id | |
+| `weight` | Float? | 目标权重 % |
+| `shares` | Integer? | 持股数 |
+| `avg_cost` | Float? | 平均成本 |
+| `return_pct` | Float? | 回报率 |
+
+### PortfolioPerformance（组合表现）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer PK | |
+| `portfolio_id` | FK → portfolios.id | |
+| `date` | Date | |
+| `total_value` | Float? | 总市值 |
+| `cumulative_return` | Float? | 累计收益 |
+| `sharpe_ratio` | Float? | 夏普比率 |
+| `max_drawdown` | Float? | 最大回撤 |
+
+### PortfolioEvaluation（组合评估）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer PK | |
+| `portfolio_id` | FK → portfolios.id | |
+| `date` | Date | |
+| `summary` | Text? | 评估摘要 |
+| `adjustment_suggestion` | Text? | 调仓建议 |
+| `risk_warnings` | Text? | 风险警告 |
+| `conviction_changes` | Text? | 观点变化 |
 
 ---
 
@@ -226,11 +279,33 @@ StockInfoCache      (独立缓存表)
 | `description` | Text? | |
 | `impact_level` | String? | 重大/中等/轻微 |
 | `related_tickers` | String? | |
+| `related_indicators` | String? | |
 | `pre_event_returns` | JSON? | 前 10 日涨跌幅 |
 | `post_event_returns` | JSON? | 后 10 日涨跌幅 |
 | `source_name` | String? | 采集源 |
+| `indicator_name_cn` | String? | |
+| `value_display` | String? | |
 | `judgment_log_id` | Integer? | FK → judgment_logs |
 | `indicator_observation_id` | Integer? | FK → indicator_observations |
+
+---
+
+### JudgmentLog（判断日志）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer PK | |
+| `date` | Date | 判断日期 |
+| `title` | String | 标题 |
+| `description` | Text? | 描述 |
+| `previous_view` | Text? | 此前判断 |
+| `new_view` | Text? | 新判断 |
+| `impact_level` | String? | 重大/中等/轻微 |
+| `related_companies` | Text? | |
+| `related_indicators` | Text? | |
+| `evidence` | Text? | 依据 |
+| `action_taken` | Text? | 行动 |
+| `created_at` | DateTime | |
 
 ---
 
@@ -239,6 +314,19 @@ StockInfoCache      (独立缓存表)
 外部数据缓存表：
 - **PriceCache**: ticker, date, price, change_pct, volume, source
 - **StockInfoCache**: ticker, data_json (完整 JSON), updated_at
+
+---
+
+### DataSource（数据源配置）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | Integer PK | |
+| `source_name` | String | 数据源名 |
+| `source_type` | String | 类型（api/collector/cache） |
+| `status` | String | 状态 |
+| `last_sync` | DateTime? | 最后同步时间 |
+| `config_json` | Text? | 配置信息 |
 
 ---
 
@@ -254,3 +342,4 @@ StockInfoCache      (独立缓存表)
 - `timeline_events.event_type`, `timeline_events.event_time`
 - `price_cache.ticker`, `price_cache.date`
 - `stock_info_cache.ticker`
+- `follows.company_id`

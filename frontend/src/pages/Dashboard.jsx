@@ -32,7 +32,7 @@ function Dashboard() {
       try {
         const data = await getDashboardOverview();
         if (!cancelled) setOverview(data);
-        const hist = await getMarketData(null, 90);
+        const hist = await getMarketData(null, 1100);
         if (!cancelled) setMarketHistory(hist || []);
         if (!cancelled) setLastUpdated(new Date());
       } catch (e) {
