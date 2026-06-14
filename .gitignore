@@ -47,3 +47,6 @@ zeabur_cli_fresh.zip
 
 # 本地 DB 备份快照(非源码)
 backups/
+
+# 本地敏感信息/账号/Token(永远不提交)
+local_secrets/
