@@ -64,7 +64,11 @@ def _get_window_return(data: list[dict], start_dt, end_dt) -> Optional[float]:
     if start_price is None or end_price is None or start_price == 0:
         return None
 
-    return round((end_price - start_price) / start_price * 100, 2)
+    pct = (end_price - start_price) / start_price * 100
+    # 防止 NaN/Inf 渗入 JSON(标准 JSON 不允许这两种值)
+    if pct != pct or pct in (float('inf'), float('-inf')):
+        return None
+    return round(pct, 2)
 
 
 def compute_relative_performance(
@@ -128,7 +132,9 @@ def compute_relative_performance(
         if pre_abs is not None and sox_data:
             sox_val = result["pre"].get("SOX", {}).get("abs")
             if sox_val is not None:
-                entry["rel"] = round(pre_abs - sox_val, 2)
+                rel = pre_abs - sox_val
+                if rel == rel and rel not in (float('inf'), float('-inf')):
+                    entry["rel"] = round(rel, 2)
 
         result["pre"][ticker] = entry
 
@@ -136,7 +142,9 @@ def compute_relative_performance(
         if post_abs is not None and sox_data:
             sox_val = result["post"].get("SOX", {}).get("abs")
             if sox_val is not None:
-                post_entry["rel"] = round(post_abs - sox_val, 2)
+                rel = post_abs - sox_val
+                if rel == rel and rel not in (float('inf'), float('-inf')):
+                    post_entry["rel"] = round(rel, 2)
 
         result["post"][ticker] = post_entry
 

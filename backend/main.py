@@ -1374,6 +1374,19 @@ def get_sequence_timeline(limit: int = 50, offset: int = 0, db: Session = Depend
     )
 
     items = []
+    import math as _math
+
+    def _sanitize_floats(obj):
+        """递归清洗 NaN/Inf(标准 JSON 不允许)→ None"""
+        if isinstance(obj, dict):
+            return {k: _sanitize_floats(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_sanitize_floats(v) for v in obj]
+        if isinstance(obj, float):
+            if _math.isnan(obj) or _math.isinf(obj):
+                return None
+        return obj
+
     for e in tl_events:
         item = {
             "id": e.id,
@@ -1443,7 +1456,7 @@ def get_sequence_timeline(limit: int = 50, offset: int = 0, db: Session = Depend
                     item["company_impact"] = obs.company_impact
                     item["unit"] = indicator.unit
 
-        items.append(item)
+        items.append(_sanitize_floats(item))
 
     return items
 
