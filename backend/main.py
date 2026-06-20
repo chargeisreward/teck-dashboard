@@ -1015,15 +1015,17 @@ def _compute_marginal_change(db, indicator: KeyIndicator, latest: IndicatorObser
 # ── 产业影响分析批量生成 ──
 
 def batch_analyze_industry_impact(db: Session):
-    """为所有缺少 industry_impact 的最新观测值调用 DeepSeek API 生成分析"""
+    """为所有缺少 industry_impact 或 analysis 的最新观测值调用 MiniMax API 生成分析"""
     from models import IndicatorObservation as ObsModel
 
     obs_list = (
         db.query(ObsModel)
         .filter(
-            ObsModel.industry_impact.is_(None),
             ObsModel.value.isnot(None),
             ObsModel.marginal_change_pct.isnot(None),
+        )
+        .filter(
+            (ObsModel.industry_impact.is_(None)) | (ObsModel.analysis.is_(None))
         )
         .order_by(ObsModel.date.desc())
         .limit(20)
@@ -1036,27 +1038,49 @@ def batch_analyze_industry_impact(db: Session):
         if not ind:
             continue
 
-        try:
-            result = ai_analysis.generate_industry_impact_analysis(
-                name_cn=ind.name_cn or ind.name,
-                category_cn=CATEGORY_CN_MAP.get(ind.category, ind.category or ""),
-                latest_value=obs.value,
-                previous_value=obs.previous_value,
-                change_pct=obs.change_pct,
-                marginal_change_pct=obs.marginal_change_pct,
-                comparison_window=obs.comparison_window,
-                unit=ind.unit or "",
-                related_tickers=ind.related_tickers or "",
-            )
-            if result:
-                obs.industry_impact = result.get("industry_impact", "")
-                obs.chain_impact = result.get("chain_impact", "")
-                obs.company_impact = result.get("company_impact", "")
-                db.commit()
-                updated += 1
-        except Exception as e:
-            logger.warning(f"Industry impact analysis failed for {ind.name}: {e}")
-            db.rollback()
+        # 1) 三重影响分析
+        if not obs.industry_impact:
+            try:
+                result = ai_analysis.generate_industry_impact_analysis(
+                    name_cn=ind.name_cn or ind.name,
+                    category_cn=CATEGORY_CN_MAP.get(ind.category, ind.category or ""),
+                    latest_value=obs.value,
+                    previous_value=obs.previous_value,
+                    change_pct=obs.change_pct,
+                    marginal_change_pct=obs.marginal_change_pct,
+                    comparison_window=obs.comparison_window,
+                    unit=ind.unit or "",
+                    related_tickers=ind.related_tickers or "",
+                )
+                if result:
+                    obs.industry_impact = result.get("industry_impact", "")
+                    obs.chain_impact = result.get("chain_impact", "")
+                    obs.company_impact = result.get("company_impact", "")
+                    db.commit()
+                    updated += 1
+            except Exception as e:
+                logger.warning(f"Industry impact analysis failed for {ind.name}: {e}")
+                db.rollback()
+
+        # 2) 一句话边际变化分析
+        if not obs.analysis and obs.change_pct is not None:
+            try:
+                one_liner = ai_analysis.generate_indicator_analysis(
+                    name_cn=ind.name_cn or ind.name,
+                    category_cn=CATEGORY_CN_MAP.get(ind.category, ind.category or ""),
+                    latest_value=obs.value,
+                    previous_value=obs.previous_value,
+                    change_pct=obs.change_pct,
+                    unit=ind.unit or "",
+                    source=ind.source or "",
+                )
+                if one_liner:
+                    obs.analysis = one_liner
+                    db.commit()
+                    updated += 1
+            except Exception as e:
+                logger.warning(f"Indicator one-sentence analysis failed for {ind.name}: {e}")
+                db.rollback()
 
     return updated
 
