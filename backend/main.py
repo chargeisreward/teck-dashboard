@@ -1,8 +1,9 @@
+import asyncio
 import logging
 import os
 from bisect import bisect_right
 from collections import defaultdict
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, joinedload
@@ -1014,7 +1015,7 @@ def _compute_marginal_change(db, indicator: KeyIndicator, latest: IndicatorObser
 
 # ── 产业影响分析批量生成 ──
 
-def batch_analyze_industry_impact(db: Session):
+def batch_analyze_industry_impact(db: Session, limit: int = 20):
     """为所有缺少 industry_impact 或 analysis 的最新观测值调用 MiniMax API 生成分析"""
     from models import IndicatorObservation as ObsModel
 
@@ -1028,7 +1029,7 @@ def batch_analyze_industry_impact(db: Session):
             (ObsModel.industry_impact.is_(None)) | (ObsModel.analysis.is_(None))
         )
         .order_by(ObsModel.date.desc())
-        .limit(20)
+        .limit(limit)
         .all()
     )
 
@@ -1373,11 +1374,29 @@ def get_industry_intelligence(db: Session = Depends(get_db)):
 # =========================================================================
 
 
+async def _batch_analyze_worker():
+    """后台任务：每次最多分析 3 条观测值，避免阻塞主请求。"""
+    from database import SessionLocal
+
+    def _run():
+        db = SessionLocal()
+        try:
+            analyzed = batch_analyze_industry_impact(db, limit=3)
+            logger.info(f"Background batch analyze completed: {analyzed} observations")
+        except Exception as e:
+            logger.warning(f"Background batch analyze failed: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
+    await asyncio.to_thread(_run)
+
+
 @app.post("/api/industry/batch-analyze")
-def trigger_batch_analyze(db: Session = Depends(get_db)):
-    """触发批量AI分析：为所有缺少 industry_impact 的观测值生成产业链影响分析"""
-    updated = batch_analyze_industry_impact(db)
-    return {"success": True, "analyzed": updated}
+async def trigger_batch_analyze(background_tasks: BackgroundTasks):
+    """触发批量AI分析：后台为缺少分析的观测值生成产业链影响分析"""
+    background_tasks.add_task(_batch_analyze_worker)
+    return {"success": True, "message": "后台批量分析已启动，每次最多处理 3 条观测值"}
 
 
 @app.get("/api/industry/sequence-timeline")
