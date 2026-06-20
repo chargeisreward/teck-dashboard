@@ -9,14 +9,15 @@ No configuration files are used at runtime.
 
 | Variable | Default | Used in | Purpose |
 |---|---|---|---|
-| `DEEPSEEK_API_KEY` | — | `ai_analysis.py:15` | Authentication for DeepSeek Chat API (AI analysis generation) |
+| `MINIMAX_API_KEY` | — | `ai_analysis.py:15` | Authentication for MiniMax API (AI analysis generation) |
 | `FRED_API_KEY` | — | `data_pipeline/macro_collector.py:40` | Authentication for FRED (Federal Reserve) macro-economic data API |
 
 ### Optional
 
 | Variable | Default | Used in | Purpose |
 |---|---|---|---|
-| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | `ai_analysis.py:16` | Custom base URL for DeepSeek API (for proxies or mirrors) |
+| `MINIMAX_BASE_URL` | `https://api.minimax.io/v1` | `ai_analysis.py:16` | Base URL for MiniMax OpenAI-compatible API |
+| `MINIMAX_MODEL` | `MiniMax-M3` | `ai_analysis.py:17` | MiniMax model ID used for AI analysis |
 | `DB_PATH` | `./teck_dashboard.db` | `database.py:6`, `entrypoint.sh:7` | SQLite database file path. In production (Docker): `/data/teck_dashboard.db` |
 | `PORT` | `8080` | `entrypoint.sh:27` | HTTP listen port for uvicorn. Zeabur injects `PORT=8080` automatically |
 | `PYTHON_VERSION` | `3.11.15` | Dockerfile (build arg) | Python runtime version for Docker builds |
@@ -54,8 +55,9 @@ never be committed.
 Template: `.env.example`
 
 ```
-DEEPSEEK_API_KEY=sk-your-key-here
-DEEPSEEK_BASE_URL=https://api.deepseek.com
+MINIMAX_API_KEY=sk-your-key-here
+MINIMAX_BASE_URL=https://api.minimax.io/v1
+MINIMAX_MODEL=MiniMax-M3
 ```
 
 ## Docker build arguments

@@ -1,5 +1,5 @@
 """
-DeepSeek AI 分析生成模块
+MiniMax AI 分析生成模块
 为指标边际变化生成"一句话分析"，解释变化驱动逻辑。
 """
 
@@ -12,12 +12,88 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-API_URL = f"{DEEPSEEK_BASE_URL}/v1/chat/completions"
+MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
+MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1")
+MINIMAX_MODEL = os.getenv("MINIMAX_MODEL", "MiniMax-M3")
+API_URL = f"{MINIMAX_BASE_URL}/chat/completions"
 
-# 内存缓存避免同一指标同一值重复调用 DeepSeek API
+# 内存缓存避免同一指标同一值重复调用 MiniMax API
 _analysis_cache = {}
+
+
+def _strip_thinking(content: str) -> str:
+    """Strip <think>...</think> reasoning blocks from model output."""
+    if not content:
+        return content
+    # Remove <think>...</think> (MiniMax-M3 style)
+    while "<think>" in content and "</think>" in content:
+        start = content.find("<think>")
+        end = content.find("</think>", start) + len("</think>")
+        content = content[:start] + content[end:]
+    # Also handle <thinking> variants
+    while "<thinking>" in content and "</thinking>" in content:
+        start = content.find("<thinking>")
+        end = content.find("</thinking>", start) + len("</thinking>")
+        content = content[:start] + content[end:]
+    return content.strip()
+
+
+def _strip_json_fences(content: str) -> str:
+    """Remove markdown JSON fences like ```json ... ```."""
+    if not content:
+        return content
+    content = content.strip()
+    if content.startswith("```"):
+        # Drop first fence line
+        lines = content.splitlines()
+        if lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        content = "\n".join(lines).strip()
+    return content
+
+
+def _call_minimax(
+    prompt: str,
+    max_tokens: int = 400,
+    temperature: float = 0.3,
+    response_format: Optional[dict] = None,
+    timeout: int = 40,
+) -> Optional[str]:
+    """调用 MiniMax OpenAI-compatible Chat Completions API，返回原始文本内容。"""
+    if not MINIMAX_API_KEY:
+        logger.warning("MINIMAX_API_KEY not set, skipping AI analysis")
+        return None
+
+    payload = {
+        "model": MINIMAX_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if response_format:
+        payload["response_format"] = response_format
+
+    try:
+        resp = requests.post(
+            API_URL,
+            headers={
+                "Authorization": f"Bearer {MINIMAX_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=timeout,
+        )
+        if resp.status_code == 200:
+            content = resp.json()["choices"][0]["message"]["content"].strip()
+            return _strip_thinking(content)
+        else:
+            logger.warning(f"MiniMax API error ({resp.status_code}): {resp.text[:300]}")
+            return None
+    except Exception as e:
+        logger.warning(f"MiniMax API call failed: {e}")
+        return None
 
 
 def generate_indicator_analysis(
@@ -30,7 +106,7 @@ def generate_indicator_analysis(
     source: str,
 ) -> Optional[str]:
     """
-    调用 DeepSeek API 生成指标边际变化的"一句话分析"。
+    调用 MiniMax API 生成指标边际变化的"一句话分析"。
     返回的中文文本约 50-100 字，解释边际变化的驱动逻辑与产业链含义。
 
     缓存策略:
@@ -62,33 +138,12 @@ def generate_indicator_analysis(
         f"- 语言简洁专业，50-80字"
     )
 
-    try:
-        resp = requests.post(
-            API_URL,
-            headers={
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "deepseek-chat",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 200,
-                "temperature": 0.3,
-            },
-            timeout=15,
-        )
-        if resp.status_code == 200:
-            result = resp.json()["choices"][0]["message"]["content"].strip()
-            result = result.strip("\"'「」")
-            _analysis_cache[cache_key] = result
-            logger.info(f"AI analysis generated for {name_cn}: {result[:60]}...")
-            return result
-        else:
-            logger.warning(f"DeepSeek API error ({resp.status_code}): {resp.text[:200]}")
-            return None
-    except Exception as e:
-        logger.warning(f"DeepSeek API call failed for {name_cn}: {e}")
-        return None
+    result = _call_minimax(prompt, max_tokens=2000, temperature=0.3)
+    if result:
+        result = result.strip("\"'「」")
+        _analysis_cache[cache_key] = result
+        logger.info(f"AI analysis generated for {name_cn}: {result[:60]}...")
+    return result
 
 
 def generate_industry_impact_analysis(
@@ -132,32 +187,24 @@ def generate_industry_impact_analysis(
         f"注意：前值缺失时，不可以解读为没有变化。如果边际变化数据可用，优先基于边际变化分析。"
     )
 
+    content = _call_minimax(
+        prompt,
+        max_tokens=2500,
+        temperature=0.3,
+        response_format={"type": "json_object"},
+        timeout=40,
+    )
+    if not content:
+        return None
+
+    content = _strip_json_fences(content)
+
     try:
-        resp = requests.post(
-            API_URL,
-            headers={
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "deepseek-chat",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 500,
-                "temperature": 0.3,
-                "response_format": {"type": "json_object"},
-            },
-            timeout=20,
-        )
-        if resp.status_code == 200:
-            content = resp.json()["choices"][0]["message"]["content"].strip()
-            result = json.loads(content)
-            logger.info(f"Industry impact analysis generated for {name_cn}")
-            return result
-        else:
-            logger.warning(f"DeepSeek API error ({resp.status_code}): {resp.text[:200]}")
-            return None
-    except Exception as e:
-        logger.warning(f"Industry impact analysis failed for {name_cn}: {e}")
+        result = json.loads(content)
+        logger.info(f"Industry impact analysis generated for {name_cn}")
+        return result
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse MiniMax JSON response for {name_cn}: {e}; content={content[:200]}")
         return None
 
 

@@ -9,8 +9,9 @@ Deploy the full-stack dashboard (FastAPI backend + React frontend) to Zeabur usi
 - `.env` file at the project root with:
 
   ```
-  DEEPSEEK_API_KEY=sk-xxxx
-  DEEPSEEK_BASE_URL=https://api.deepseek.com
+  MINIMAX_API_KEY=sk-xxxx
+  MINIMAX_BASE_URL=https://api.minimax.io/v1
+  MINIMAX_MODEL=MiniMax-M3
   FRED_API_KEY=xxxx
   ```
 
@@ -38,8 +39,9 @@ The app requires these environment variables at runtime:
 
 | Variable | Required? | Source |
 |---|---|---|
-| `DEEPSEEK_API_KEY` | Yes (for AI analysis) | .env file |
-| `DEEPSEEK_BASE_URL` | Optional (defaults to api.deepseek.com) | .env file |
+| `MINIMAX_API_KEY` | Yes (for AI analysis) | .env file |
+| `MINIMAX_BASE_URL` | Optional (defaults to `https://api.minimax.io/v1`) | .env file |
+| `MINIMAX_MODEL` | Optional (defaults to `MiniMax-M3`) | .env file |
 | `FRED_API_KEY` | Yes (for macro data) | .env file |
 | `PORT` | Zeabur injects automatically | — |
 | `DB_PATH` | Defaults to `/data/teck_dashboard.db` | Dockerfile |
@@ -62,7 +64,7 @@ You must add a volume through the **Zeabur Dashboard**:
 
 1. Open: `https://zeabur.com/projects/<project-id>/services/<service-id>?envID=<env-id>`
 2. Click the **Volumes** tab
-3. Click **Mount Volumes**
+3. Click **Mount Volumes`
 4. Volume ID: `data`
 5. Mount Directory: `/data`
 6. Save
@@ -110,12 +112,12 @@ check timeout, the load balancer returns 502. Wait 30s and retry.
 **Database resets on redeploy:**
 The `/data` volume is not mounted. Follow Step 3 above and re-deploy.
 
-**DeepSeek AI analysis fails:**
-Check that `DEEPSEEK_API_KEY` is set:
+**MiniMax AI analysis fails:**
+Check that `MINIMAX_API_KEY` is set:
 ```bash
 zeabur variable list --id <id> --env-id <env-id>
 ```
-Test the key: `curl https://api.deepseek.com/v1/models -H "Authorization: Bearer $KEY"`
+Test the key: `curl https://api.minimax.io/v1/models -H "Authorization: Bearer $MINIMAX_API_KEY"`
 
 ## Related
 
