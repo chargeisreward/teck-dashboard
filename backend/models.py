@@ -229,7 +229,7 @@ class IndicatorObservation(Base):
     # 边际变化分析字段
     marginal_change_pct = Column(Float, nullable=True)      # 边际变化百分比（对比最近一次值）
     comparison_window = Column(String, nullable=True)       # 比较窗口: "30d" / "90d" / "last_change"
-    industry_impact = Column(Text, nullable=True)          # 行业景气度影响分析（DeepSeek生成）
+    industry_impact = Column(Text, nullable=True)          # 行业景气度影响分析（AI生成）
     chain_impact = Column(Text, nullable=True)             # 产业链影响分析
     company_impact = Column(Text, nullable=True)           # 重点公司影响分析
 

@@ -33,7 +33,7 @@
 - **`Dockerfile`**: added `VOLUME /data` declaration.
 - **Frontend chart window**: `api.js` default days restored to 90 (was accidentally
   changed to 1100).
-- **Env vars**: `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `FRED_API_KEY` injected
+- **Env vars**: `MINIMAX_API_KEY`, `MINIMAX_BASE_URL`, `FRED_API_KEY` injected
   into Zeabur service via CLI (were missing after initial deploy).
 
 ### Database

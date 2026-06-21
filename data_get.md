@@ -286,7 +286,7 @@ async def collect_all(source=None, db=None)
 
 ## 五、AI 分析数据
 
-### 5.1 DeepSeek API
+### 5.1 MiniMax API
 
 **文件**: `backend/ai_analysis.py`
 
@@ -295,22 +295,25 @@ async def collect_all(source=None, db=None)
 1. **`generate_indicator_analysis()`** — 单指标"一句话分析"
    - 输入：指标名称、最新值、上期值、变化百分比
    - 输出：50-80 字中文分析，解释变化驱动逻辑
-   - 模型：`deepseek-chat`，temperature=0.3
+   - 模型：`MiniMax-M3`，temperature=0.3
    - 缓存：`_analysis_cache` 避免同一数值重复调用
 
 2. **`generate_industry_impact_analysis()`** — 三重影响分析
    - 输出 JSON：行业景气度、产业链影响、重点公司影响
    - 使用 `response_format: json_object`
 
-**Endpoint**: `https://api.deepseek.com/v1/chat/completions`
+**Endpoint**: `https://api.minimax.io/v1/chat/completions`
 
 **配置**:
 ```python
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY", "")
+MINIMAX_BASE_URL = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.io/v1")
+MINIMAX_MODEL = os.getenv("MINIMAX_MODEL", "MiniMax-M3")
 ```
 
 **调度**: 自动采集完成后触发批量分析（`scheduler.py` line 97-103）
+
+**注意**: MiniMax-M3 会在输出中包含 `<think>` 推理块，且可能用 Markdown JSON 围栏包裹 JSON 输出。`ai_analysis.py` 中已内置 `_strip_thinking` 和 `_strip_json_fences` 进行清洗。
 
 ### 5.2 分析结果持久化
 - 分析文本写入 `IndicatorObservation.analysis` 字段
@@ -325,18 +328,19 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
 | Key | 用途 | 配置方式 | 获取地址 |
 |-----|------|----------|----------|
-| `DEEPSEEK_API_KEY` | DeepSeek AI 分析 | 环境变量（`os.getenv`），Zeabur Dashboard 设置 | https://platform.deepseek.com |
+| `MINIMAX_API_KEY` | MiniMax AI 分析 | 环境变量（`os.getenv`），Zeabur Dashboard 设置 | https://platform.minimax.io |
 | `FRED_API_KEY` | FRED 宏观数据 | `.env` 文件或环境变量 | https://fred.stlouisfed.org/docs/api/api_key.html |
 
 ### 环境变量加载方式
 
-**Zeabur 生产环境**: 在 Zeabur Dashboard → Service → Environment Variables 中设置 `DEEPSEEK_API_KEY` 和 `FRED_API_KEY`。
+**Zeabur 生产环境**: 在 Zeabur Dashboard → Service → Environment Variables 中设置 `MINIMAX_API_KEY` 和 `FRED_API_KEY`。
 
 **本地开发**: 项目根目录 `.env` 文件（已 `.gitignore`）：
 ```
-DEEPSEEK_API_KEY=sk-xxxx
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-FRED_API_KEY=xxxxxxx
+MINIMAX_API_KEY=your-minimax-api-key-here
+MINIMAX_BASE_URL=https://api.minimax.io/v1
+MINIMAX_MODEL=MiniMax-M3
+FRED_API_KEY=your-fred-key-here
 ```
 
 **`.env` 加载代码**（`backend/data_pipeline/macro_collector.py` line 32-40）：
@@ -350,7 +354,7 @@ if env_path.exists():
 ```
 
 **无 Key 时的行为**:
-- DeepSeek API: `DEEPSEEK_API_KEY` 为空时 `generate_indicator_analysis()` 和 `generate_industry_impact_analysis()` 返回 `None`，不会崩溃
+- MiniMax API: `MINIMAX_API_KEY` 为空时 `generate_indicator_analysis()` 和 `generate_industry_impact_analysis()` 返回 `None`，不会崩溃
 - FRED: `FRED_API_KEY` 未设置时输出 `"FRED_API_KEY not set — skipping FRED macro data"` 并跳过，不影响其他功能
 
 ---
@@ -405,7 +409,7 @@ DB_PATH = os.environ.get("DB_PATH", "./teck_dashboard.db")
 
 | 任务 | 频率 | 执行函数 | 操作 |
 |------|------|----------|------|
-| 产业数据采集 + AI 分析 | 每日 6:00 / 18:00 | `auto_collect_and_analyze()` | 运行全量 14+ 采集器 → DeepSeek 分析 |
+| 产业数据采集 + AI 分析 | 每日 6:00 / 18:00 | `auto_collect_and_analyze()` | 运行全量 14+ 采集器 → MiniMax 分析 |
 | 关注价格刷新 | 每 15 分钟 | `refresh_follow_prices_15min()` | 腾讯 API 实时行情 |
 | 公司财务数据刷新 | 每日 7:00 / 19:00 | `refresh_company_financials()` | yfinance PE/市值/营收 |
 | 事件后涨跌幅刷新 | 每 4 小时 | `refresh_post_event_returns()` | 时间线涨跌幅计算 |
@@ -442,7 +446,7 @@ DB_PATH = os.environ.get("DB_PATH", "./teck_dashboard.db")
 │   └─────────┘   └─────────┘   └─────────┘   └─────────┘         │
 │                                                                   │
 │   ┌────────────┐   ┌────────────┐   ┌──────────────────────┐     │
-│   │ 14 行业采集器│   │FRED 宏观   │   │ DeepSeek AI 分析     │     │
+│   │ 14 行业采集器│   │FRED 宏观   │   │ MiniMax AI 分析      │     │
 │   │ TSMC/WSTS/  │   │50+ 指标    │   │ 一句话分析 + 三重影响│     │
 │   │ NVIDIA/...  │   │GDP/CPI/...│   │ 缓存防重复调用        │     │
 │   └────────────┘   └────────────┘   └──────────────────────┘     │

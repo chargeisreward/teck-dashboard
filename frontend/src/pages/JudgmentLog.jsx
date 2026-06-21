@@ -180,7 +180,7 @@ function SequenceCard({ item, index }) {
           <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>{item.description}</div>
         )}
 
-        {/* 影响分析 (DeepSeek) */}
+        {/* 影响分析 (AI) */}
         {(item.industry_impact || item.chain_impact || item.company_impact) && (
           <div style={{ marginTop: 8 }}>
             <button onClick={() => setExpanded(!expanded)}
@@ -308,7 +308,7 @@ function SequenceTimeline() {
         <span style={{ color: "#ef4444" }}>● 判断·重大</span>
         <span style={{ color: "#f59e0b" }}>● 判断·中等</span>
         <span>前值最高/最低 = 历史统计</span>
-        <span>影响分析由 DeepSeek AI 生成</span>
+        <span>影响分析由 MiniMax AI 生成</span>
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ No mock/random/synthetic data allowed. All prices must be adjusted for dividends
 - **Frontend**: React 19 + Vite 8 + Recharts (`frontend/src/`)
 - **Scheduler**: APScheduler in `backend/scheduler.py` — daily 6/14/22 collects, 7/19 refreshes prices
 - **Collectors**: Industry data collectors in `backend/industry_collector/sources/`
+- **AI**: MiniMax-M3 in `backend/ai_analysis.py`
 - **Docker**: Multi-stage build, single `Dockerfile`, Zeabur deployment
 
 ## Key Files

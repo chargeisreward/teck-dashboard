@@ -20,6 +20,8 @@
 | 文档 | 内容 |
 |------|------|
 | [操作指南合集](how-to/index.md) | 添加API端点、数据源、公司、估值场景等 |
+| [部署到 Zeabur](how-to/deploy.md) | Docker 构建、环境变量、持久卷配置 |
+| [切换 AI 分析提供商](how-to/switch-ai-provider.md) | 更换 AI 服务、本地测试、Zeabur 更新 |
 | [如何排查常见问题](how-to/index.md#如何排查常见问题) | 启动失败、数据为空、API 限流 |
 
 ## 参考
@@ -32,6 +34,7 @@
 | [数据库参考](reference/database.md) | 24 数据表结构、关系、索引 |
 | [前端参考](reference/frontend.md) | 13 页面组件树、路由、API 客户端模式 |
 | [配置参考](reference/configuration.md) | 全部环境变量、Docker 构建参数 |
+| [AI 分析模块参考](reference/ai-analysis.md) | MiniMax 接口、函数、响应清洗、后台任务 |
 
 ## 概念解读
 
@@ -41,6 +44,9 @@
 |------|------|
 | [估值方法论](explanation/valuation.md) | Gordon Growth v1 + 供需感知 Future PE v2 |
 | [数据源策略](explanation/data-sources.md) | 多数据源切换、14 采集器、宏观指标、缓存机制 |
+| [行情数据策略](explanation/price-data-strategy.md) | 腾讯/yfinance/akshare/Naver 优先级与降级 |
+| [产业情报统一视图](explanation/industry-intelligence-view.md) | P0/P1/P2 分层、时间线事件总线、AI 分析 |
+| [为什么使用 MiniMax-M3](explanation/ai-analysis-provider.md) | AI 提供商切换的设计 rationale |
 
 ## 专题文档
 

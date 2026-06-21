@@ -1,6 +1,6 @@
 """
 定时调度器
-- 每日 6:00 / 18:00 自动采集产业数据 + DeepSeek分析
+- 每日 6:00 / 18:00 自动采集产业数据 + MiniMax AI分析
 - 每15分钟刷新关注公司实时价格
 - 每日 7:00 / 19:00 刷新公司股价/PE/市值
 - 每4小时刷新待更新的事件后涨跌幅
@@ -17,7 +17,7 @@ scheduler = BackgroundScheduler()
 
 
 def auto_collect_and_analyze():
-    """自动采集全部数据源 + DeepSeek AI分析"""
+    """自动采集全部数据源 + MiniMax AI分析"""
     try:
         from database import SessionLocal
         from industry_collector import collect_all
@@ -94,12 +94,12 @@ def auto_collect_and_analyze():
 
             logger.info(f"Auto-collect: {collected} new events from {len(results.get('success', []))} indicators")
 
-            # ── DeepSeek AI 批量分析 ──
+            # ── MiniMax AI 批量分析 ──
             try:
                 from main import batch_analyze_industry_impact
                 analyzed = batch_analyze_industry_impact(db)
                 if analyzed:
-                    logger.info(f"DeepSeek analysis generated for {analyzed} indicators")
+                    logger.info(f"MiniMax analysis generated for {analyzed} indicators")
             except Exception as e:
                 logger.warning(f"Batch analyze failed: {e}")
 
@@ -215,7 +215,7 @@ def refresh_post_event_returns():
 
 def init_scheduler():
     """初始化定时调度器"""
-    # ── 每日 6:00, 18:00 自动采集 + DeepSeek分析 ──
+    # ── 每日 6:00, 18:00 自动采集 + MiniMax分析 ──
     scheduler.add_job(
         auto_collect_and_analyze,
         trigger="cron",

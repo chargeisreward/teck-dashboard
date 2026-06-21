@@ -5,6 +5,7 @@
 | 指南 | 内容 |
 |------|------|
 | [部署到 Zeabur](deploy.md) | Docker 构建、环境变量、持久卷配置 |
+| [切换 AI 分析提供商](switch-ai-provider.md) | 更换 AI 服务、本地测试、Zeabur 更新 |
 | [如何排查常见问题](#如何排查常见问题) | 启动失败、数据为空、API 限流 |
 
 ---
@@ -261,15 +262,18 @@ pip install akshare --upgrade
 # akshare 依赖国内数据源，可能需要国内网络环境
 ```
 
-### DeepSeek AI 分析不生成
+### MiniMax AI 分析不生成
 
-检查 `ai_analysis.py` 中的 API Key 是否有效：
+检查 `ai_analysis.py` 中的 `MINIMAX_API_KEY` 是否有效：
+
 ```bash
-curl https://api.deepseek.com/v1/chat/completions \
-  -H "Authorization: Bearer sk-..." \
+curl https://api.minimax.io/v1/chat/completions \
+  -H "Authorization: Bearer $MINIMAX_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"model": "deepseek-chat", "messages": [{"role": "user", "content": "test"}]}'
+  -d '{"model": "MiniMax-M3", "messages": [{"role": "user", "content": "test"}]}'
 ```
+
+若返回内容包含 `<think>` 块或 ` ```json ` 围栏，检查 `_strip_thinking` / `_strip_json_fences` 是否已启用。
 
 ### 组合跟踪页面无数据
 

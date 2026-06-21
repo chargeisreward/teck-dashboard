@@ -9,10 +9,10 @@ Deploy the full-stack dashboard (FastAPI backend + React frontend) to Zeabur usi
 - `.env` file at the project root with:
 
   ```
-  MINIMAX_API_KEY=sk-xxxx
+  MINIMAX_API_KEY=your-minimax-api-key-here
   MINIMAX_BASE_URL=https://api.minimax.io/v1
   MINIMAX_MODEL=MiniMax-M3
-  FRED_API_KEY=xxxx
+  FRED_API_KEY=your-fred-key-here
   ```
 
 ## Step 1: Deploy via Dockerfile

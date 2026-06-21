@@ -91,7 +91,7 @@
 │ API (美股) │ │ (全球)    │ │ (A股/港) │ │ (韩国)   │
 └───────────┘ └──────────┘ └──────────┘ └──────────┘
 ┌───────────┐ ┌──────────┐ ┌──────────┐
-│ FRED API  │ │ tedata   │ │ DeepSeek │
+│ FRED API  │ │ tedata   │ │ MiniMax  │
 │ (宏观)    │ │ (全球宏观)│ │ AI 分析  │
 └───────────┘ └──────────┘ └──────────┘
 ```
@@ -135,7 +135,7 @@
 
 ### 5. 产业情报的信号系统
 
-14 个行业数据采集器定时抓取公开数据（ASML/NVIDIA/TSMC 官方 IR、TrendForce、WSTS/SIA 等），结合 DeepSeek AI 自动生成边际变化解读，经 Tier 分层（P0/P1/P2）推送给用户。
+14 个行业数据采集器定时抓取公开数据（ASML/NVIDIA/TSMC 官方 IR、TrendForce、WSTS/SIA 等），结合 MiniMax AI 自动生成边际变化解读，经 Tier 分层（P0/P1/P2）推送给用户。
 
 ### 6. 启动即用的幂等迁移
 
@@ -158,7 +158,7 @@
 | A股行情 | akshare | - |
 | 韩国行情 | Naver Mobile API | - |
 | 宏观数据 | FRED API / tedata | - |
-| AI 分析 | DeepSeek API | - |
+| AI 分析 | MiniMax API | - |
 
 ---
 
@@ -187,7 +187,7 @@ Layer 1: 财务数据（半日级）
   yfinance → Financial + StockInfoCache
 
 Layer 2: 行业数据（半日级）
-  14 采集器 → KeyIndicator + IndicatorObservation → DeepSeek AI 分析
+  14 采集器 → KeyIndicator + IndicatorObservation → MiniMax AI 分析
 
 Layer 3: 宏观数据（日级）
   FRED API + tedata → KeyIndicator + IndicatorObservation

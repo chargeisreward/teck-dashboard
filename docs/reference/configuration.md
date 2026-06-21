@@ -55,7 +55,7 @@ never be committed.
 Template: `.env.example`
 
 ```
-MINIMAX_API_KEY=sk-your-key-here
+MINIMAX_API_KEY=your-minimax-api-key-here
 MINIMAX_BASE_URL=https://api.minimax.io/v1
 MINIMAX_MODEL=MiniMax-M3
 ```

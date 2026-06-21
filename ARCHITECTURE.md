@@ -45,7 +45,7 @@ flowchart TB
         Akshare["akshare<br/>(A-shares, HK stocks)"]
         Naver["Naver Mobile API<br/>(Korean stocks)"]
         FRED["FRED API<br/>(macro-economics)"]
-        DeepSeek["DeepSeek Chat API<br/>(AI analysis generation)"]
+        MiniMax["MiniMax API<br/>(AI analysis generation)"]
     end
 
     subgraph Zeabur["Deployment (Zeabur / Kubernetes)"]
@@ -69,7 +69,7 @@ flowchart TB
     Akshare --> PriceColl
     Naver --> PriceColl
     FRED --> MacroColl
-    DeepSeek --> Business
+    MiniMax --> Business
 
     IndustryColl --> DB
     PriceColl --> DB
@@ -109,7 +109,7 @@ Vite dev server proxies `/api` to `http://localhost:8002`.
 | `scheduler.py` | APScheduler | 4 jobs: collect/6h, prices/15min, financials/12h, returns/4h |
 | `valuation.py` | Gordon Growth DCF | Fair PE, implied growth rate, peer comparison |
 | `valuation_v2.py` | Supply-Demand Future PE | Chain scores, growth adjustments, valuation signals |
-| `ai_analysis.py` | DeepSeek integration | One-line + triple-impact AI analysis |
+| `ai_analysis.py` | MiniMax integration | One-line + triple-impact AI analysis |
 | `backfill_3y_prices.py` | Historical price backfill | Bulk 3-yr + daily incremental backfill |
 
 ### 3. Data Model (SQLite, 24 tables)
@@ -144,7 +144,7 @@ TimelineEvent ←── IndicatorObservation + JudgmentLog
 
 ```
 IndicatorObservation (new value with change_pct)
-    → DeepSeek Chat API (model: deepseek-chat)
+    → MiniMax API (model: MiniMax-M3)
     → industry_impact / chain_impact / company_impact
     → stored in IndicatorObservation.analysis fields
 ```
@@ -192,7 +192,7 @@ auto_collect_and_analyze()
   → for each success → write IndicatorObservation
   → for each new obs → create TimelineEvent
   → batch_analyze_industry_impact()
-      → DeepSeek API → industry/chain/company impact
+      → MiniMax API → industry/chain/company impact
 ```
 
 **Company refresh flow (every 7/19 hr):**

@@ -8,7 +8,7 @@ AI 芯片与半导体产业链深度分析平台。覆盖 42+ 上市公司、10+
 |------|------|
 | **市场概览** | 核心公司实时价格、90日涨跌幅走势、市值比较、产品分类 |
 | **产业链全景** | 10 环节深度拆解（市场容量、供需缺口、市占率、PE比较、财务数据） |
-| **产业情报** | 85+ 供应链关键指标、DeepSeek AI 分析、时间线、判断日志 |
+| **产业情报** | 85+ 供应链关键指标、MiniMax AI 分析、时间线、判断日志 |
 | **TSM+EWY配置方案** | Gordon Growth DCF 估值 + 供需感知未来PE（v2） |
 | **模拟组合** | 多组合管理、持仓跟踪（7段期间涨跌幅）、权重配置、PE/EPS基本面分析、AI调仓建议 |
 | **关注组合** | 关注公司实时价格、PE_TTM、多期间收益、EPS增速及前瞻PE |
@@ -21,7 +21,7 @@ AI 芯片与半导体产业链深度分析平台。覆盖 42+ 上市公司、10+
 | 前端 | React 19 + Vite 8 + React Router 7 + Recharts 3 |
 | 后端 | FastAPI + SQLAlchemy 2.0 + SQLite |
 | 数据源 | 腾讯财经 API / yfinance / akshare / Naver API / FRED API |
-| AI | DeepSeek API（指标边际变化分析） |
+| AI | MiniMax API（指标边际变化分析） |
 | 采集器 | 14 行业数据源（NVIDIA IR、TSMC IR、TrendForce、WSTS/SIA 等）+ 宏观指标采集 |
 
 ## 快速启动
@@ -58,6 +58,7 @@ python backfill_3y_prices.py    # 补齐 3 年复权价格
 |------|------|
 | [教程](docs/tutorial.md) | 从零启动并探索仪表盘 |
 | [操作指南](docs/how-to/index.md) | 添加API端点、数据源、公司、估值场景 |
+| [切换 AI 提供商](docs/how-to/switch-ai-provider.md) | 更换 AI 服务、本地测试、Zeabur 更新 |
 | [API 参考](docs/reference/api.md) | 40+ 端点详细说明 |
 | [数据库参考](docs/reference/database.md) | 25+ 数据表结构 |
 | [架构概览](docs/explanation/architecture.md) | 系统设计、数据流 |
@@ -76,7 +77,7 @@ python backfill_3y_prices.py    # 补齐 3 年复权价格
 │   ├── valuation.py               # Gordon Growth 估值引擎
 │   ├── valuation_v2.py            # 供需感知未来PE估值引擎
 │   ├── price_data.py              # 多源价格数据获取（腾讯/yfinance/akshare/Naver）
-│   ├── ai_analysis.py             # DeepSeek AI 分析生成
+│   ├── ai_analysis.py             # MiniMax AI 分析生成
 │   ├── scheduler.py               # 定时采集调度（6任务）
 │   ├── startup_migration.py       # 启动迁移（新证券自动补入持久化DB）
 │   ├── portfolio_tracking.py      # 组合跟踪（期间收益+PE/EPS计算）

@@ -502,7 +502,7 @@ function IndustryIntelligence() {
         <span style={{ color: TIER_CONFIG[3].color }}>■ P2 参考</span>
         <span>景气↑/↓ = 边际变化方向</span>
         <span>点击卡片展开 → 行业/产业链/公司影响分析</span>
-        <span>分析由 DeepSeek AI 生成</span>
+        <span>分析由 MiniMax AI 生成</span>
       </div>
     </div>
   );

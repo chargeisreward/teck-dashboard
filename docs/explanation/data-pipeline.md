@@ -116,7 +116,7 @@ auto-change-computation.
                          │
                          ▼
             batch_analyze_industry_impact()
-            (DeepSeek AI → industry/chain/company impact)
+            (MiniMax AI → industry/chain/company impact)
 ```
 
 **Note**: Most collectors attempt live web scraping first. When scraping fails
@@ -208,7 +208,7 @@ macro indicators as well.
 |---|---|---|
 | yfinance rate limit | `All data sources exhausted for TICKER` | Next scheduled refresh retries automatically |
 | akshare disconnected | `RemoteDisconnected` | Next refresh retries; cache serves stale data |
-| DeepSeek 402 (no balance) | `Insufficient Balance` | Recharge DeepSeek account, retry by calling batch-analyze endpoint |
+| MiniMax 401/403 (key invalid) | `Unauthorized` / `Forbidden` | Check `MINIMAX_API_KEY` in Zeabur env, retry by calling batch-analyze endpoint |
 | Tencent API timeout | All Tencent calls fail | Falls through to yfinance → cache |
 | Collector scrape fails | Hardcoded fallback values used | No action needed; data is approximate |
 | FRED key missing | Macro indicators empty | Set `FRED_API_KEY` env var and re-trigger |
