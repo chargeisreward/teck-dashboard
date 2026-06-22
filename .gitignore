@@ -50,3 +50,4 @@ backups/
 
 # 本地敏感信息/账号/Token(永远不提交)
 local_secrets/
+.deploy_tmp/

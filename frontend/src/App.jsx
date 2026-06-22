@@ -14,13 +14,13 @@ const TechGlossary = lazy(() => import("./pages/TechGlossary"));
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/teck_dashboard">
       <div className="app-layout">
         <nav className="sidebar">
           <h1>Teck Dashboard</h1>
           <p className="subtitle">AI 芯片产业链分析平台</p>
           <ul className="nav-list">
-            <li><NavLink to="/" end>📊 市场概览</NavLink></li>
+            <li><NavLink to="/overview" end>📊 市场概览</NavLink></li>
             <li><NavLink to="/portfolio">📁 跟踪组合</NavLink></li>
             <li style={{ marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
               <span style={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: 1 }}>全景</span>
@@ -43,7 +43,8 @@ function App() {
         </nav>
         <main className="main-content">
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Navigate to="/overview" replace />} />
+            <Route path="/overview" element={<Dashboard />} />
             <Route path="/industry-chain" element={<IndustryChain />} />
             <Route path="/industry-intelligence" element={<IndustryIntelligence />} />
             <Route path="/industry-intelligence/sequence" element={<JudgmentLog />} />
@@ -62,7 +63,7 @@ function App() {
                 <TechGlossary />
               </Suspense>
             } />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         </main>
       </div>

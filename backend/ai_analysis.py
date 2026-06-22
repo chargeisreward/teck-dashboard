@@ -59,7 +59,7 @@ def _call_minimax(
     max_tokens: int = 400,
     temperature: float = 0.3,
     response_format: Optional[dict] = None,
-    timeout: int = 40,
+    timeout: int = 90,
 ) -> Optional[str]:
     """调用 MiniMax OpenAI-compatible Chat Completions API，返回原始文本内容。"""
     if not MINIMAX_API_KEY:
@@ -138,7 +138,7 @@ def generate_indicator_analysis(
         f"- 语言简洁专业，50-80字"
     )
 
-    result = _call_minimax(prompt, max_tokens=2000, temperature=0.3)
+    result = _call_minimax(prompt, max_tokens=1500, temperature=0.3)
     if result:
         result = result.strip("\"'「」")
         _analysis_cache[cache_key] = result
@@ -189,10 +189,10 @@ def generate_industry_impact_analysis(
 
     content = _call_minimax(
         prompt,
-        max_tokens=2500,
+        max_tokens=1500,
         temperature=0.3,
         response_format={"type": "json_object"},
-        timeout=40,
+        timeout=90,
     )
     if not content:
         return None

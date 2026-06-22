@@ -1,4 +1,5 @@
-const API_BASE = "/api";
+// Use Vite's BASE_URL so dev ("/") and prod ("/teck_dashboard/") both work
+const API_BASE = `${import.meta.env.BASE_URL}api`.replace(/\/+$/, "");
 
 async function fetchJSON(url) {
   const res = await fetch(url);
