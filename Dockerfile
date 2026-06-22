@@ -6,6 +6,9 @@ WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
 COPY frontend/ ./
+# Cloud deploy: assets are served at /teck_dashboard/ behind nginx
+ARG VITE_BASE=/teck_dashboard/
+ENV VITE_BASE=$VITE_BASE
 RUN npm run build
 
 # ==========================================
