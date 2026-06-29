@@ -13,8 +13,12 @@ import CompanyData from "./pages/CompanyData";
 const TechGlossary = lazy(() => import("./pages/TechGlossary"));
 
 function App() {
+  // Vite uses VITE_BASE at build time; dev defaults to "/" so local "npm run dev"
+  // works at http://localhost:5180/, and the Docker build sets it to "/teck_dashboard/"
+  // for the cloud deploy.
+  const basename = import.meta.env.VITE_BASE === "/teck_dashboard/" ? "/teck_dashboard" : "/";
   return (
-    <BrowserRouter basename="/teck_dashboard">
+    <BrowserRouter basename={basename}>
       <div className="app-layout">
         <nav className="sidebar">
           <h1>Teck Dashboard</h1>
