@@ -28,6 +28,54 @@ except ImportError:
     HAS_YFINANCE = False
     logger.warning("yfinance not installed; US/global price data will be limited")
 
+
+def _to_usd_b(raw_value, currency, db=None):
+    """把 yfinance 返回的 raw 本地币种金额 → 亿美元 (USD billion)。
+
+    设计动机：yfinance.info["marketCap"] / ["totalRevenue"] / ["netIncomeToCommon"]
+    对 ADR/海外 ticker 返回的是公司本地币种（JPY/KRW/TWD/EUR 等）。
+    直接 /1e8 会得到错误的 "USD billion"（例如 ATEYY revenue 被显示成 ¥11,286亿）。
+
+    Args:
+        raw_value: yfinance 返回的原始金额
+        currency: yfinance.info["currency"] 或 ["financialCurrency"]（如 "JPY"/"USD"/None）
+        db: SQLAlchemy Session，用于查 fx_rate_cache；为 None 时跳过 FX 查询
+
+    Returns:
+        float: 转换后的 USD billion (即 亿美元)；汇率未知时返回 None（不写脏值）
+    """
+    if raw_value is None:
+        return None
+    cur = (currency or "USD").upper()
+    if cur == "USD":
+        return round(float(raw_value) / 1e8, 2)
+
+    if db is None:
+        logger.warning(f"_to_usd_b: no DB session, skipping FX conversion for {cur}")
+        return None
+
+    try:
+        from fx_rates import get_fx_rate
+        fx_rate = get_fx_rate(db, cur, date.today())
+    except Exception as e:
+        logger.warning(f"_to_usd_b: FX lookup failed for {cur}: {e}")
+        return None
+
+    if fx_rate is None or fx_rate <= 0:
+        logger.warning(f"_to_usd_b: no FX rate for {cur}; refusing to store raw non-USD value")
+        return None
+
+    usd = float(raw_value) / fx_rate
+    return round(usd / 1e8, 2)
+
+
+def _currency_from_yfinance_info(info: dict) -> str:
+    """从 yfinance.info 推断币种。优先 financialCurrency（报表币种），fallback currency（市值币种）。"""
+    if not info:
+        return "USD"
+    cur = info.get("financialCurrency") or info.get("currency") or "USD"
+    return cur or "USD"
+
 # ── AKShare (A股) ──────────────────────────────────────────────
 try:
     import akshare as ak
@@ -676,8 +724,11 @@ def get_current_price(ticker: str) -> Optional[float]:
     return None
 
 
-def get_stock_info(ticker: str) -> dict:
-    """获取股票基本信息（市值、PE、PS等），多数据源"""
+def get_stock_info(ticker: str, db=None) -> dict:
+    """获取股票基本信息（市值、PE、PS等），多数据源
+
+    db 可选：传入后用于 yfinance fallback 时的 FX 汇率查询（避免 ADR 币种被误算为 USD）。
+    """
     if not ticker:
         return {}
 
@@ -723,9 +774,20 @@ def get_stock_info(ticker: str) -> dict:
             stock = yf.Ticker(ticker)
             info = stock.info
             if info and info.get("marketCap"):
+                # yfinance 返回的 marketCap / totalRevenue / netIncomeToCommon 可能是公司本地币种
+                # （例如 ATEYY → JPY、ASMIY → EUR、TCEHY → HKD），需要 FX 转换才能正确写 *_b
+                cur = _currency_from_yfinance_info(info)
+                fx_rate = None
+                # 从缓存读 FX 汇率（仅当币种非 USD 时才查）
+                if cur != "USD":
+                    try:
+                        from fx_rates import get_fx_rate
+                        fx_rate = get_fx_rate(db, cur, date.today()) if db else None
+                    except Exception as e:
+                        logger.warning(f"yfinance FX lookup failed for {cur}: {e}")
                 result.update({
                     "market_cap": info.get("marketCap"),
-                    "market_cap_b": round(info.get("marketCap", 0) / 1e8, 2) if info.get("marketCap") else None,
+                    "market_cap_b": _to_usd_b(info.get("marketCap"), cur, db),
                     "pe_ttm": info.get("trailingPE"),
                     "ps_ttm": info.get("priceToSalesTrailing12Months"),
                     "pb": info.get("priceToBook"),
@@ -733,9 +795,11 @@ def get_stock_info(ticker: str) -> dict:
                     "enterprise_value": info.get("enterpriseValue"),
                     "ev_ebitda": info.get("enterpriseToEbitda"),
                     "revenue": info.get("totalRevenue"),
-                    "revenue_b": round(info.get("totalRevenue", 0) / 1e8, 2) if info.get("totalRevenue") else None,
+                    "revenue_b": _to_usd_b(info.get("totalRevenue"), cur, db),
                     "net_income": info.get("netIncomeToCommon"),
-                    "net_income_b": round(info.get("netIncomeToCommon", 0) / 1e8, 2) if info.get("netIncomeToCommon") else None,
+                    "net_income_b": _to_usd_b(info.get("netIncomeToCommon"), cur, db),
+                    "currency": cur,
+                    "fx_rate": fx_rate,
                     "sector": info.get("sector"),
                     "industry": info.get("industry"),
                     "short_name": info.get("shortName"),
@@ -764,9 +828,12 @@ def get_stock_info(ticker: str) -> dict:
                 row = df[df["代码"] == a_share_code]
                 if not row.empty:
                     r = row.iloc[0]
+                    # akshare 总市值 是元 (CNY)。按项目规则（"保留都用亿美元"）转 USD。
                     result.update({
-                        "market_cap": r.get("总市值"),
-                        "market_cap_b": round(float(r.get("总市值", 0)) / 1e8, 2) if r.get("总市值") else None,
+                        "market_cap_cny": r.get("总市值"),       # raw CNY，保留供审计
+                        "market_cap": r.get("总市值"),            # 兼容旧字段：前端如不读 _cny 则视同 USD
+                        "market_cap_b": _to_usd_b(r.get("总市值"), "CNY", db),
+                        "currency": "CNY",
                         "pe_ttm": r.get("市盈率-动态"),
                         "ps_ttm": r.get("市销率"),
                         "pb": r.get("市净率"),
@@ -957,7 +1024,7 @@ def get_stock_info_cached(ticker: str, db) -> dict:
     带缓存的股票信息主入口
     策略: live fetch → write cache → return; 若 live 失败则读 cache → return
     """
-    live = get_stock_info(ticker)
+    live = get_stock_info(ticker, db=db)
     if live and live.get("source"):
         _write_stock_info_cache(db, ticker, live)
         return live

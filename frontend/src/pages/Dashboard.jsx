@@ -133,19 +133,19 @@ function Dashboard() {
               {chain.total_market_cap != null && (
                 <div className="chain-card-metric">
                   <span className="metric-label">估值合计</span>
-                  <span className="metric-value">${formatFinancial(chain.total_market_cap)}亿</span>
+                  <span className="metric-value">${formatFinancial(chain.total_market_cap, 0)}亿</span>
                 </div>
               )}
               {chain.total_revenue_ttm != null && (
                 <div className="chain-card-metric">
                   <span className="metric-label">TTM 营收合计</span>
-                  <span className="metric-value">${formatFinancial(chain.total_revenue_ttm)}亿</span>
+                  <span className="metric-value">${formatFinancial(chain.total_revenue_ttm, 0)}亿</span>
                 </div>
               )}
               {chain.total_net_income_ttm != null && (
                 <div className="chain-card-metric">
                   <span className="metric-label">TTM 利润合计</span>
-                  <span className="metric-value">${formatFinancial(chain.total_net_income_ttm)}亿</span>
+                  <span className="metric-value">${formatFinancial(chain.total_net_income_ttm, 0)}亿</span>
                 </div>
               )}
             </div>

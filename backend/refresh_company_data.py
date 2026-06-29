@@ -86,17 +86,18 @@ def refresh_all_company_data(db) -> dict:
     """
     from models import Company, CompanyChainLink, Financial, StockInfoCache
 
-    # 获取所有链上公司（去重）
-    chain_companies = (
+    # 获取所有有 ticker 的公司（不限是否在产业链图谱中）—
+    # dashboard overview 按 company_type 聚合，应用厂商/网络互联等组别常无 chain link
+    # 但仍需要 cache 才能算出涨跌/估值；否则卡片会显示空白
+    all_companies = (
         db.query(Company)
-        .join(CompanyChainLink)
-        .distinct()
+        .filter(Company.ticker.isnot(None), Company.ticker != "")
         .all()
     )
 
     results = {"updated": 0, "skipped": 0, "errors": 0, "details": []}
 
-    for co in chain_companies:
+    for co in all_companies:
         ticker = co.ticker
         if not ticker:
             results["skipped"] += 1
@@ -178,15 +179,20 @@ def refresh_all_company_data(db) -> dict:
                     net_inc = info.get("netIncomeToCommon")
                     current_pe = cache_data.get("pe_ttm")
                     yf_pe = info.get("trailingPE")
+                    # yfinance 返回的 totalRevenue / netIncomeToCommon 可能是公司本地币种
+                    # （例如 ATEYY → JPY、TCEHY → HKD），需 FX 转换才能正确写 *_b
+                    from price_data import _to_usd_b, _currency_from_yfinance_info
+                    yf_currency = _currency_from_yfinance_info(info)
                     cache_data.update({
                         "revenue": rev,
-                        "revenue_b": round(float(rev) / 1e8, 2) if rev else existing_data.get("revenue_b"),
+                        "revenue_b": _to_usd_b(rev, yf_currency, db) if rev else existing_data.get("revenue_b"),
                         "net_income": net_inc,
-                        "net_income_b": round(float(net_inc) / 1e8, 2) if net_inc else existing_data.get("net_income_b"),
+                        "net_income_b": _to_usd_b(net_inc, yf_currency, db) if net_inc else existing_data.get("net_income_b"),
                         "pe_ttm": float(current_pe) if current_pe else (float(yf_pe) if yf_pe else existing_data.get("pe_ttm")),
                         "ps_ttm": info.get("priceToSalesTrailing12Months"),
                         "pb": info.get("priceToBook"),
                         "dividend_yield": info.get("dividendYield"),
+                        "currency": yf_currency,
                         "sector": info.get("sector"),
                         "industry": info.get("industry"),
                         "long_name": info.get("longName"),
