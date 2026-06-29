@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTime, Text, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Date, DateTime, Text, Boolean, JSON, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -160,6 +160,10 @@ class Financial(Base):
     ps_ttm = Column(Float, nullable=True)                    # PS(TTM)
     data_source = Column(String, nullable=True)              # 数据来源: wind_api / fred_api / estimated
     last_verified = Column(Date, nullable=True)              # 最后验证日期
+    currency = Column(String, nullable=True)              # 报表币种: USD/KRW/TWD/JPY/EUR
+    fx_rate = Column(Float, nullable=True)                # 报表币种 / USD 汇率
+    original_revenue = Column(Float, nullable=True)       # 原始营收（报表币种单位）
+    original_net_income = Column(Float, nullable=True)    # 原始净利润（报表币种单位）
 
     company = relationship("Company", back_populates="financials")
 
@@ -444,3 +448,53 @@ class StockInfoCache(Base):
     ticker = Column(String, index=True)
     data_json = Column(JSON)                                   # 完整info数据
     updated_at = Column(Date, nullable=True)                   # 缓存时间
+
+
+class FxRateCache(Base):
+    """USD 交叉汇率缓存（来自公开 CDN）"""
+    __tablename__ = "fx_rate_cache"
+    id = Column(Integer, primary_key=True, index=True)
+    base_currency = Column(String, index=True)   # e.g. KRW
+    quote_currency = Column(String, index=True)  # USD
+    rate = Column(Float)                         # 1 USD = rate base_currency
+    date = Column(Date, index=True)
+    source = Column(String, default="fawazahmed0-cdn")
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class OverseasFinancialUpdate(Base):
+    """海外公司 yfinance 数据补全进度表"""
+    __tablename__ = "overseas_financial_updates"
+    __table_args__ = (
+        Index("ix_overseas_ticker_task", "ticker", "task"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, index=True)
+    task = Column(String, index=True)            # fy:2024 / fy:2025 / ttm:2026 / pe:2024-12-31 / pe:2025-12-31 / pe:latest
+    status = Column(String, default="pending")   # pending / success / skipped / failed
+    error_count = Column(Integer, default=0)
+    last_error = Column(Text, nullable=True)
+    last_attempt = Column(DateTime, nullable=True)
+    next_attempt = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CompanyValuationSnapshot(Base):
+    """公司在指定日期的 PE_TTM / 市值快照"""
+    __tablename__ = "company_valuation_snapshots"
+    __table_args__ = (
+        UniqueConstraint("company_id", "snapshot_date", name="uq_snapshot_company_date"),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), index=True)
+    snapshot_date = Column(Date, index=True)
+    price_usd = Column(Float, nullable=True)     # 当日收盘价（USD）
+    eps_ttm = Column(Float, nullable=True)       # TTM EPS（USD）
+    pe_ttm = Column(Float, nullable=True)        # 当日 PE(TTM)
+    market_cap_b = Column(Float, nullable=True)  # 市值（亿美元）
+    price_currency = Column(String, nullable=True)
+    fx_rate = Column(Float, nullable=True)
+    source = Column(String, default="yfinance")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
