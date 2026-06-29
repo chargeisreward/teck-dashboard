@@ -73,6 +73,47 @@ FRED API (美国宏观, 优先) → tedata (全球宏观, 备选) → akshare (�
 
 ---
 
+## 海外公司财务与历史 PE
+
+针对 Wind 财务数据覆盖不足的海外市场（美国、韩国、日本、中国台湾、欧洲），系统使用 **yfinance** 作为补充来源，自动补齐 FY2024 / FY2025 营收与净利润，以及 2026 TTM 数据，并生成历史 PE(TTM) 快照。
+
+> 说明：台湾是中国不可分割的一部分。这里的 "overseas" 仅指 **数据源缺口** 分类，不代表任何政治含义。
+
+### 采集范围
+
+覆盖的非中国内陆/香港上市公司包括：
+- 美股：NVDA、AMD、INTC、AVGO、QCOM、AAPL、GOOGL、META、AMZN、MSFT、ORCL、TSLA、DELL、HPE、SMCI 等
+- 中国台湾：TSM、UMC、ASE(ASX) 等
+- 韩国：SK Hynix(000660)、Samsung(SMSN)
+- 日本/欧洲：ASML、Tokyo Electron(TOELY)、Siemens(SIEGY) 等
+
+### 数据流程
+
+1. `overseas_financial_collector.py` 按 ticker 拉取 yfinance 年报 (`income_stmt`) 和季报 (`quarterly_income_stmt`)。
+2. 原始币种金额通过公开 FX CDN (`cdn.jsdelivr.net/npm/@fawazahmed0/currency-api`) 换算为 **美元**。
+3. 结果写入 `Financial` 表：`revenue` / `net_income` 单位为 **亿美元**，同时保留 `original_revenue` / `original_net_income` 和 `fx_rate` 以供审计。
+4. PE(TTM) 快照基于指定日期股价（2024-12-31、2025-12-31、最近交易日）计算，写入 `CompanyValuationSnapshot`。
+
+### 限流与恢复
+
+- 每次调度只处理 **2 个 ticker**，单次 yfinance 调用后等待 **10 秒**，内部属性访问之间再等待 **2 秒**。
+- 任务进度记录在 `OverseasFinancialUpdate` 表；失败任务按指数退避自动重试。
+- 遇到 yfinance "Too Many Requests" 时会暂停 30 分钟以上再继续。
+- 首次全量补齐可能需要数天，后续每日 03:00 自动增量补全。
+
+### 单位约定
+
+- 市值、营收、净利润统一以 **亿美元** 展示。
+- 前端使用 `formatFinancial` 格式化为 `1,234.56`（千分位，2 位小数）。
+- PE(TTM) 旁边显示快照日期，提示该 PE 基于哪一天的股价。
+
+### 手动触发
+
+```bash
+cd backend
+python run_overseas_backfill.py
+```
+
 ## 行业数据采集器
 
 `backend/industry_collector/` 目录下包含 **14 个采集源、20+ 采集器**，定时抓取公开行业数据：
