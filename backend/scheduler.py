@@ -140,6 +140,24 @@ def refresh_company_financials():
         logger.error(f"Company data refresh failed: {e}")
 
 
+def refresh_overseas_financials_slowly():
+    """每天慢慢补海外公司财务与历史 PE（限流保护）。"""
+    try:
+        from database import SessionLocal
+        from overseas_financial_collector import ensure_tasks, run_next_batch
+
+        db = SessionLocal()
+        try:
+            ensure_tasks(db)
+            result = run_next_batch(db, tickers_per_run=3)
+            if result["processed"]:
+                logger.info(f"Overseas slow refresh: {result}")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Overseas slow refresh failed: {e}")
+
+
 def refresh_follow_prices_15min():
     """每15分钟刷新关注股票的实时价格"""
     try:
@@ -257,8 +275,19 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # 每天 03:00 慢速补海外财务/PE 数据
+    scheduler.add_job(
+        refresh_overseas_financials_slowly,
+        trigger="cron",
+        hour=3,
+        minute=0,
+        id="refresh_overseas_financials",
+        name="Slow yfinance backfill for overseas financials",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
         "Scheduler started: auto-collect at 6/18, price refresh every 15min, "
-        "company data at 7/19, post-returns every 4h"
+        "company data at 7/19, overseas backfill at 3:00, post-returns every 4h"
     )
