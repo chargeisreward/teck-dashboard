@@ -2,11 +2,15 @@ from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 import pandas as pd
 
+import overseas_financial_collector as ofc
 from overseas_financial_collector import (
     update_financial,
     update_pe_snapshot,
     _record_result,
+    _defer_pending_tickers,
+    ensure_tasks,
     reset_rate_limited_backoff,
+    run_next_batch,
 )
 from models import Financial, CompanyValuationSnapshot, Company, OverseasFinancialUpdate
 
@@ -133,3 +137,128 @@ def test_reset_rate_limited_backoff_pushes_all_pending(db):
     # success 记录不碰
     db.refresh(rec_success)
     assert rec_success.next_attempt is None
+
+
+def test_ensure_tasks_dedupes_tickers_across_companies(db):
+    """GOOGL/INTC/SMSN 各对应多家公司时，ensure_tasks 只创建一份任务集合。
+
+    之前的逻辑靠 exists 检查防重复 INSERT，仍然正确但会跑 12 次冗余 SELECT。
+    新逻辑用 set 在外层就去重，节省查询次数。
+    """
+    # GOOGL = 3 家业务部门、INTC = 2 家、SMSN = 4 家
+    googlers = ["Google", "Google Cloud", "Google Ads"]
+    intlers = ["Intel", "Intel Foundry"]
+    sams = ["Samsung Electronics", "Samsung Memory", "Samsung Foundry", "Samsung SDI"]
+    for n in googlers:
+        db.add(Company(name=n, ticker="GOOGL", company_type="internet", sector="AI"))
+    for n in intlers:
+        db.add(Company(name=n, ticker="INTC", company_type="chip_design", sector="CPU"))
+    for n in sams:
+        db.add(Company(name=n, ticker="SMSN", company_type="memory", sector="DRAM"))
+    db.flush()
+
+    created = ensure_tasks(db)
+    assert created == 18  # 3 unique tickers × 6 tasks each
+
+    # 每个 ticker 在表里恰好 6 条（不是 3×6=18 或 2×6=12 或 4×6=24）
+    for t in ("GOOGL", "INTC", "SMSN"):
+        n_rows = db.query(OverseasFinancialUpdate).filter_by(ticker=t).count()
+        assert n_rows == 6, f"{t}: 期望 6 行，实际 {n_rows}"
+
+
+def test_run_next_batch_skips_remaining_tickers_on_429(db, monkeypatch):
+    """批内任一 ticker 撞 yfinance 429 后，剩余 ticker 不再触网，
+    而是统一推迟到 6h 后再试（error_count 不增加，避免被滥用退避惩罚）。"""
+    # 三个 ticker 各登记一家公司 + 各 6 个 pending 任务
+    db.add_all([
+        Company(name="NVIDIA", ticker="NVDA", company_type="chip_design", sector="GPU"),
+        Company(name="AMD", ticker="AMD", company_type="chip_design", sector="GPU"),
+        Company(name="AVGO", ticker="AVGO", company_type="chip_design", sector="semiconductor"),
+    ])
+    db.flush()
+
+    for ticker in ("NVDA", "AMD", "AVGO"):
+        for task in ("fy:2024", "fy:2025", "ttm:2026",
+                      "pe:2024-12-31", "pe:2025-12-31", "pe:latest"):
+            db.add(OverseasFinancialUpdate(ticker=ticker, task=task, status="pending"))
+    db.commit()
+
+    # 不管哪个 ticker 先被打到，都模拟 429（与 SQL 顺序无关）
+    yf_calls: list[str] = []
+
+    def fake_yf_obj(symbol: str):
+        yf_calls.append(symbol)
+        raise RuntimeError("Too Many Requests. Rate limited.")
+
+    monkeypatch.setattr(ofc, "_yf_obj", fake_yf_obj)
+    monkeypatch.setattr(ofc, "YFINANCE_DELAY_SECONDS", 0)
+    monkeypatch.setattr("time.sleep", lambda *_a, **_k: None)
+
+    before = datetime.utcnow()
+    stats = run_next_batch(db, tickers_per_run=3)
+
+    # 整批只调用 1 次 yfinance（429 后整批放弃），剩下 2 个 ticker 跳过
+    assert len(yf_calls) == 1, \
+        f"整批应只调用 1 次 yfinance（429 后放弃），实际 {len(yf_calls)} 次: {yf_calls}"
+    first_ticker = yf_calls[0]
+    assert first_ticker in {"NVDA", "AMD", "AVGO"}
+
+    # 第一个 ticker 的 6 个任务都被 429 标记
+    first_recs = db.query(OverseasFinancialUpdate).filter_by(ticker=first_ticker).all()
+    for rec in first_recs:
+        assert rec.error_count == 1
+        assert rec.status == "pending"
+        assert "Too Many Requests" in (rec.last_error or "")
+
+    # 剩余 2 个 ticker 的 pending 任务：error_count=0，next_attempt 推到 +6h
+    other_tickers = {"NVDA", "AMD", "AVGO"} - {first_ticker}
+    assert len(other_tickers) == 2
+    for ticker in other_tickers:
+        recs = db.query(OverseasFinancialUpdate).filter_by(ticker=ticker, status="pending").all()
+        assert len(recs) == 6
+        for rec in recs:
+            assert rec.error_count == 0, f"{ticker} 不应被记错误（未触网）"
+            assert rec.next_attempt is not None
+            delta = rec.next_attempt - before
+            assert timedelta(hours=5, minutes=55) < delta < timedelta(hours=6, seconds=5), \
+                f"{ticker} 推迟窗口应≈6h，实际 {delta}"
+
+    # 统计：第一个 ticker 算 processed + failed（硬失败计 1 次/ticker）；
+    # 剩下 2 个算 rate_limited（未触网，单独计数）
+    assert stats["processed"] == 1
+    assert stats["failed"] == 1
+    assert stats["rate_limited"] == 2
+
+
+def test_defer_pending_tickers_no_error_count_increment(db):
+    """_defer_pending_tickers 单纯推迟，不应增加 error_count。"""
+    rec_a = OverseasFinancialUpdate(
+        ticker="NVDA", task="fy:2024", status="pending",
+        error_count=2, next_attempt=datetime.utcnow() + timedelta(minutes=5),
+    )
+    rec_b = OverseasFinancialUpdate(
+        ticker="AMD", task="fy:2024", status="pending", error_count=0,
+    )
+    rec_skipped = OverseasFinancialUpdate(
+        ticker="AVGO", task="fy:2024", status="success", error_count=0,
+    )
+    db.add_all([rec_a, rec_b, rec_skipped]); db.flush()
+    before = datetime.utcnow()
+
+    n = _defer_pending_tickers(db, ["NVDA", "AMD"], hours=6)
+
+    assert n == 2
+    db.expire_all()
+    db.refresh(rec_a)
+    db.refresh(rec_b)
+    db.refresh(rec_skipped)
+
+    # error_count 不被改（保持调度原因 vs 真实错误的差异）
+    assert rec_a.error_count == 2
+    assert rec_b.error_count == 0
+    # pending 的 next_attempt 都推到 +6h
+    for rec in (rec_a, rec_b):
+        delta = rec.next_attempt - before
+        assert timedelta(hours=5, minutes=55) < delta < timedelta(hours=6, seconds=5)
+    # success 记录不碰
+    assert rec_skipped.next_attempt is None

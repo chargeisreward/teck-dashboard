@@ -269,13 +269,17 @@ def update_pe_snapshot(db, ticker: str, company_id: int, task: str,
 
 
 def ensure_tasks(db):
-    """为每个 overseas ticker 创建所有待处理任务（幂等）。"""
-    companies = db.query(Company).filter(Company.ticker.isnot(None)).all()
+    """为每个海外 ticker 创建所有待处理任务（幂等，按 ticker 去重）。"""
+    # 同 ticker 多公司（GOOGL/INTC/SMSN）的多个业务部门共享同一份任务表 —
+    # 用 set 去重避免重复插入；后续 run_next_batch 按 .distinct() 取 ticker，已经天然去重。
+    seen_tickers: set[str] = set()
     created = 0
+    companies = db.query(Company).filter(Company.ticker.isnot(None)).all()
     for co in companies:
-        t = co.ticker.upper().strip()
-        if not is_overseas_ticker(t):
+        t = (co.ticker or "").upper().strip()
+        if not is_overseas_ticker(t) or t in seen_tickers:
             continue
+        seen_tickers.add(t)
         tasks = ["fy:2024", "fy:2025", "ttm:2026"]
         for d in SNAPSHOT_PE_DATES:
             tasks.append(f"pe:{d.isoformat()}")
@@ -289,7 +293,7 @@ def ensure_tasks(db):
                 db.add(OverseasFinancialUpdate(ticker=t, task=task, status="pending"))
                 created += 1
     db.commit()
-    logger.info(f"ensure_tasks: created {created} tasks")
+    logger.info(f"ensure_tasks: created {created} tasks for {len(seen_tickers)} unique tickers")
     return created
 
 
@@ -325,7 +329,11 @@ def _record_result(db, rec: OverseasFinancialUpdate, success: bool, error: Optio
 
 
 def run_next_batch(db, tickers_per_run: int = TICKERS_PER_RUN) -> dict:
-    """处理下一批 pending 的 ticker，返回统计。"""
+    """处理下一批 pending 的 ticker，返回统计。
+
+    共享 IP：批内任一 ticker 撞 yfinance 429，整批剩余 ticker 也推到 6h 后再试。
+    避免明知被 ban 还继续触发请求，浪费预算。
+    """
     now = datetime.utcnow()
     pending_tickers = (
         db.query(OverseasFinancialUpdate.ticker)
@@ -340,10 +348,19 @@ def run_next_batch(db, tickers_per_run: int = TICKERS_PER_RUN) -> dict:
     )
     tickers = [r[0] for r in pending_tickers]
     if not tickers:
-        return {"processed": 0, "success": 0, "failed": 0}
+        return {"processed": 0, "success": 0, "failed": 0, "rate_limited": 0}
 
-    stats = {"processed": 0, "success": 0, "failed": 0}
+    stats = {"processed": 0, "success": 0, "failed": 0, "rate_limited": 0}
+    # 整批共享同一出口 IP，任一 ticker 撞 429 后整批放弃，避免向已被 ban 的 IP 继续打
+    rate_limited = False
+
     for ticker in tickers:
+        if rate_limited:
+            logger.warning(f"run_next_batch: skipping {ticker} (prior 429 in batch)")
+            _defer_pending_tickers(db, [ticker], hours=6)
+            stats["rate_limited"] += 1
+            continue
+
         stats["processed"] += 1
         try:
             company = db.query(Company).filter(
@@ -392,19 +409,46 @@ def run_next_batch(db, tickers_per_run: int = TICKERS_PER_RUN) -> dict:
                     else:
                         stats["failed"] += 1
                 except Exception as e:
-                    _record_result(db, task_rec, False, str(e))
+                    err_str = str(e)
+                    _record_result(db, task_rec, False, err_str)
                     stats["failed"] += 1
+                    if _is_rate_limit(err_str):
+                        rate_limited = True
 
             time.sleep(YFINANCE_DELAY_SECONDS)
         except Exception as e:
             logger.error(f"Batch processing failed for {ticker}: {e}")
             err = str(e)
+            if _is_rate_limit(err):
+                rate_limited = True
             for rec in db.query(OverseasFinancialUpdate).filter_by(ticker=ticker, status="pending").all():
                 _record_result(db, rec, False, err)
             stats["failed"] += 1
 
     logger.info(f"run_next_batch: {stats}")
     return stats
+
+
+def _defer_pending_tickers(db, tickers: list[str], hours: int = 6) -> int:
+    """批量把一组 ticker 的 pending 任务统一推迟到 t+N hours。
+
+    用于：整批已被 yfinance 限流，把还没轮到的 ticker 直接延后，
+    节省本来要浪费的 yfinance 调用配额。
+
+    不增加 error_count（错误计数应反映真实失败次数，而不是调度原因）。
+    """
+    if not tickers:
+        return 0
+    new_attempt = datetime.utcnow() + timedelta(hours=hours)
+    pending = db.query(OverseasFinancialUpdate).filter(
+        OverseasFinancialUpdate.ticker.in_(tickers),
+        OverseasFinancialUpdate.status == "pending",
+    ).all()
+    for rec in pending:
+        rec.next_attempt = new_attempt
+    db.commit()
+    logger.info(f"_defer_pending_tickers: deferred {len(pending)} tasks across {len(tickers)} tickers to {new_attempt}")
+    return len(pending)
 
 
 def _skip_all(db, ticker, reason):
