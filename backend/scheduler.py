@@ -141,7 +141,13 @@ def refresh_company_financials():
 
 
 def refresh_overseas_financials_slowly():
-    """每天慢慢补海外公司财务与历史 PE（限流保护）。"""
+    """每 6 小时慢速补海外公司财务与历史 PE（限流保护）。
+
+    调度频率由 init_scheduler 中海外 cron (hour="3,9,15,21") 控制；
+    一天 4 次 = ~8 次 yfinance 调用/天（每批 2 ticker），既能填数据又
+    不会因 IP 限流反复失败。tickers_per_run=2 比之前 3 保守，
+    在限流频繁的环境下不会被一击即中整批。
+    """
     try:
         from database import SessionLocal
         from overseas_financial_collector import ensure_tasks, run_next_batch
@@ -149,9 +155,8 @@ def refresh_overseas_financials_slowly():
         db = SessionLocal()
         try:
             ensure_tasks(db)
-            result = run_next_batch(db, tickers_per_run=3)
-            if result["processed"]:
-                logger.info(f"Overseas slow refresh: {result}")
+            result = run_next_batch(db, tickers_per_run=2)
+            logger.info(f"Overseas slow refresh: {result}")
         finally:
             db.close()
     except Exception as e:
@@ -275,14 +280,16 @@ def init_scheduler():
         replace_existing=True,
     )
 
-    # 每天 03:00 慢速补海外财务/PE 数据
+    # 慢速补海外财务/PE 数据：每 6 小时一次（03/09/15/21 UTC）。
+    # 单次 tickers_per_run=2，单批耗时 ~20s；4 次/天 最多 ~80s 总开销。
+    # 限流任务的 next_attempt 由 _record_result 自动推到 +6h，对齐 6h 窗口
     scheduler.add_job(
         refresh_overseas_financials_slowly,
         trigger="cron",
-        hour=3,
+        hour="3,9,15,21",
         minute=0,
         id="refresh_overseas_financials",
-        name="Slow yfinance backfill for overseas financials",
+        name="Slow yfinance backfill for overseas financials (4x/day)",
         replace_existing=True,
     )
 

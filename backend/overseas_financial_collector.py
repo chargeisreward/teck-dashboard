@@ -315,15 +315,19 @@ def _record_result(db, rec: OverseasFinancialUpdate, success: bool, error: Optio
     else:
         rec.error_count += 1
         rec.last_error = (error or "unknown")[:500]
-        if rec.error_count >= MAX_RETRIES:
-            rec.status = "failed"
-            rec.next_attempt = None
-        else:
+        # 限流错误绝不永久失败（yfinance 是按 IP 限流，6h 后大概率降级），
+        # 上限封顶到 24h 不让 backoff 无限增长；其他错误按 2^n 指数退避，
+        # MAX_RETRIES 次后状态置为 failed（交给 reset_rate_limited_backoff 工具）。
+        if _is_rate_limit(error):
             rec.status = "pending"
-            if _is_rate_limit(error):
-                # 一旦被限流，t+6h 再尝试，error_count 次后变成 6h*2、12h、…
-                rec.next_attempt = now + timedelta(hours=6 * rec.error_count)
+            hours = min(6 * rec.error_count, 24)
+            rec.next_attempt = now + timedelta(hours=hours)
+        else:
+            if rec.error_count >= MAX_RETRIES:
+                rec.status = "failed"
+                rec.next_attempt = None
             else:
+                rec.status = "pending"
                 rec.next_attempt = now + timedelta(hours=2 ** rec.error_count)
     db.commit()
 

@@ -105,6 +105,47 @@ def test_non_rate_limit_error_uses_exponential_backoff(db):
     assert timedelta(hours=1, seconds=55) < delta < timedelta(hours=2, seconds=5)
 
 
+def test_rate_limit_backoff_capped_at_24h(db):
+    """限流任务连续失败多次后，next_attempt 应封顶在 +24h，不再无限增长。
+    设计动机：yfinance 是按 IP 限流，但有时 24h 后就降级；超 24h 等太久。
+    同时不应永久 failed，否则需手动 reset 才能恢复。
+    """
+    rec = OverseasFinancialUpdate(
+        ticker="NVDA", task="fy:2024", status="pending", error_count=0,
+    )
+    db.add(rec); db.flush()
+
+    # 模拟 10 次连续 429
+    before = datetime.utcnow()
+    for _ in range(10):
+        _record_result(db, rec, success=False, error="Too Many Requests")
+    db.refresh(rec)
+
+    # 即使失败 10 次（远超 MAX_RETRIES=5），状态仍 pending，不应永久 failed
+    assert rec.status == "pending", "限流错误不应永久标记为 failed"
+    # 退避封顶在 24h 而不是 6*10=60h
+    delta = rec.next_attempt - before
+    assert timedelta(hours=23, minutes=55) < delta < timedelta(hours=24, seconds=5), \
+        f"应封顶 ~24h，实际 {delta}"
+    assert rec.error_count == 10
+
+
+def test_non_rate_limit_error_eventually_fails(db):
+    """非限流错误（如网络超时）超过 MAX_RETRIES=5 次应永久 failed。
+    限流错误才是永久重试，其他错误仍按旧规则失败。
+    """
+    rec = OverseasFinancialUpdate(
+        ticker="AMD", task="fy:2024", status="pending", error_count=0,
+    )
+    db.add(rec); db.flush()
+
+    for _ in range(6):  # > MAX_RETRIES
+        _record_result(db, rec, success=False, error="ConnectionResetError: peer closed")
+    db.refresh(rec)
+    assert rec.status == "failed"
+    assert rec.next_attempt is None
+
+
 def test_reset_rate_limited_backoff_pushes_all_pending(db):
     """reset 工具应该把所有 error_count>0 的 pending 推到 t+6h。"""
     rec_a = OverseasFinancialUpdate(

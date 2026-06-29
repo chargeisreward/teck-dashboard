@@ -10,6 +10,13 @@ OVERSEAS_TICKERS = {
     # AI 芯片 / 互联网 / 应用
     "NVDA", "AMD", "INTC", "AVGO", "QCOM", "AAPL", "GOOGL", "META",
     "AMZN", "MSFT", "ORCL", "TSLA", "DELL", "HPE", "SMCI",
+    # US 上市的中国互联网/科技公司（ADR / OTC）
+    "BABA",          # Alibaba 阿里巴巴
+    "TCEHY",         # Tencent 腾讯 ADR
+    "BIDU",          # Baidu 百度
+    "PDD",           # Pinduoduo 拼多多
+    "MPNGY",         # Meituan 美团 ADR
+    "XIACF",         # Xiaomi 小米 OTC
     # 晶圆 / 封测 / 存储
     "TSM", "UMC", "GFS", "ASX", "AMKR", "SMSN", "000660", "MU", "WDC", "SNDK",
     # 设备 / EDA
