@@ -31,6 +31,9 @@ Thumbs.db
 /tmp/
 nohup.out
 
+# Worktrees
+.worktrees/
+
 # Backups
 *.bak
 /package.json
