@@ -25,8 +25,8 @@ from fx_rates import get_fx_rate
 
 logger = logging.getLogger(__name__)
 
-YFINANCE_DELAY_SECONDS = 3.0
-TICKERS_PER_RUN = 3
+YFINANCE_DELAY_SECONDS = 10.0
+TICKERS_PER_RUN = 2
 MAX_RETRIES = 5
 
 SNAPSHOT_PE_DATES = [date(2024, 12, 31), date(2025, 12, 31)]
@@ -293,6 +293,13 @@ def ensure_tasks(db):
     return created
 
 
+def _is_rate_limit(error: Optional[str]) -> bool:
+    if not error:
+        return False
+    lowered = error.lower()
+    return any(k in lowered for k in ["too many requests", "rate limited", "429", "rate limit"])
+
+
 def _record_result(db, rec: OverseasFinancialUpdate, success: bool, error: Optional[str]):
     now = datetime.utcnow()
     rec.last_attempt = now
@@ -309,7 +316,10 @@ def _record_result(db, rec: OverseasFinancialUpdate, success: bool, error: Optio
             rec.next_attempt = None
         else:
             rec.status = "pending"
-            rec.next_attempt = now + timedelta(hours=2 ** rec.error_count)
+            if _is_rate_limit(error):
+                rec.next_attempt = now + timedelta(minutes=30 * rec.error_count)
+            else:
+                rec.next_attempt = now + timedelta(hours=2 ** rec.error_count)
     db.commit()
 
 
@@ -343,18 +353,29 @@ def run_next_batch(db, tickers_per_run: int = TICKERS_PER_RUN) -> dict:
                 stats["failed"] += 1
                 continue
 
-            yfo = _yf_obj(ticker)
-            info = yfo.info or {}
-            annual = yfo.income_stmt
-            quarterly = yfo.quarterly_income_stmt
-            hist = yfo.history(period="3y")
-
             tasks = db.query(OverseasFinancialUpdate).filter(
                 OverseasFinancialUpdate.ticker == ticker,
                 OverseasFinancialUpdate.status == "pending",
                 (OverseasFinancialUpdate.next_attempt.is_(None)) |
                 (OverseasFinancialUpdate.next_attempt <= now)
             ).order_by(OverseasFinancialUpdate.id).all()
+
+            yfo = _yf_obj(ticker)
+            info = yfo.info or {}
+            time.sleep(2)
+
+            # Determine which yfinance data we actually need for pending tasks
+            pending_task_names = {t.task for t in tasks}
+            needs_financials = any(t.startswith("fy:") or t.startswith("ttm:") for t in pending_task_names)
+            needs_pe = any(t.startswith("pe:") for t in pending_task_names)
+
+            annual = yfo.income_stmt if needs_financials else None
+            if needs_financials:
+                time.sleep(2)
+            quarterly = yfo.quarterly_income_stmt if (needs_financials or needs_pe) else None
+            if needs_financials or needs_pe:
+                time.sleep(2)
+            hist = yfo.history(period="3y") if needs_pe else None
 
             for task_rec in tasks:
                 try:
@@ -376,7 +397,9 @@ def run_next_batch(db, tickers_per_run: int = TICKERS_PER_RUN) -> dict:
             time.sleep(YFINANCE_DELAY_SECONDS)
         except Exception as e:
             logger.error(f"Batch processing failed for {ticker}: {e}")
-            _skip_all(db, ticker, str(e))
+            err = str(e)
+            for rec in db.query(OverseasFinancialUpdate).filter_by(ticker=ticker, status="pending").all():
+                _record_result(db, rec, False, err)
             stats["failed"] += 1
 
     logger.info(f"run_next_batch: {stats}")
