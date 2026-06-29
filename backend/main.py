@@ -37,6 +37,10 @@ from schemas import (
 )
 import ai_analysis
 from price_performance import compute_relative_performance
+from valuation_snapshot_service import (
+    get_latest_pe_snapshot, get_pe_snapshot_for_date,
+    get_latest_market_cap_snapshot,
+)
 
 # 供应链位置中文名称映射（与 IndustryData.jsx CATEGORY_CN 保持一致）
 CATEGORY_CN_MAP = {
@@ -729,6 +733,56 @@ def _get_revenue_from_cache(cache_map: dict, ticker: str | None, fin_fallback) -
             return round(float(rev) / 10, 1)
     if fin_fallback and fin_fallback.revenue is not None:
         return round(float(fin_fallback.revenue) / 10, 1)
+    return None
+
+
+def _get_pe_with_date(db, company_id: int, ticker: str | None,
+                      cache_map: dict, fin_fallback) -> tuple[float | None, str | None, str | None]:
+    """返回 (pe, snapshot_date, source)。优先 cache，其次 snapshot，最后 financials。"""
+    if ticker and ticker.upper() in cache_map:
+        data = cache_map[ticker.upper()]
+        pe = data.get("pe_ttm")
+        if pe is not None:
+            return round(float(pe), 1), None, data.get("source", "tencent")
+
+    snap = get_latest_pe_snapshot(db, company_id)
+    if snap and snap.pe_ttm is not None:
+        return round(snap.pe_ttm, 1), str(snap.snapshot_date), snap.source
+
+    if fin_fallback and fin_fallback.pe_ttm is not None:
+        return round(float(fin_fallback.pe_ttm), 1), None, fin_fallback.data_source or "financials"
+
+    return None, None, None
+
+
+def _get_market_cap_b_with_date(db, company_id: int, ticker: str | None,
+                                cache_map: dict) -> tuple[float | None, str | None]:
+    if ticker and ticker.upper() in cache_map:
+        data = cache_map[ticker.upper()]
+        val = data.get("market_cap_b")
+        if val is not None:
+            return round(float(val), 2), None
+
+    snap = get_latest_market_cap_snapshot(db, company_id)
+    if snap and snap.market_cap_b is not None:
+        return round(snap.market_cap_b, 2), str(snap.snapshot_date)
+    return None, None
+
+
+def _get_latest_market_cap(db, company_id: int, fin_fallback=None) -> float | None:
+    snap = get_latest_market_cap_snapshot(db, company_id)
+    if snap and snap.market_cap_b is not None:
+        return round(snap.market_cap_b, 2)
+
+    md = (db.query(MarketData)
+          .filter(MarketData.company_id == company_id)
+          .order_by(MarketData.date.desc())
+          .first())
+    if md and md.market_cap:
+        return round(md.market_cap, 2)
+
+    if fin_fallback and fin_fallback.pe_ttm and fin_fallback.net_income:
+        return round(fin_fallback.pe_ttm * fin_fallback.net_income, 2)
     return None
 
 
@@ -1544,6 +1598,16 @@ def get_company_data_browse(db: Session = Depends(get_db)):
             item["price_time"] = d.get("time")
             item["data_source"] = d.get("source", "tencent")
 
+        # snapshot 回退
+        snap_pe = get_latest_pe_snapshot(db, c.id)
+        if snap_pe and snap_pe.pe_ttm is not None and item.get("pe_ttm") is None:
+            item["pe_ttm"] = snap_pe.pe_ttm
+            item["pe_date"] = str(snap_pe.snapshot_date)
+        snap_mcap = get_latest_market_cap_snapshot(db, c.id)
+        if snap_mcap and snap_mcap.market_cap_b is not None and item.get("market_cap_b") is None:
+            item["market_cap_b"] = snap_mcap.market_cap_b
+            item["market_cap_date"] = str(snap_mcap.snapshot_date)
+
         # 财务数据
         company_fins = fin_map.get(c.id, [])
         item["financials"] = [
@@ -1891,6 +1955,43 @@ def get_industry_overview(db: Session = Depends(get_db)):
         supply_demand = db.query(SupplyDemand).filter(
             SupplyDemand.chain_link_id == cl.id).all()
 
+        companies_data = []
+        for ccl in companies:
+            pe_val, pe_date, pe_src = _get_pe_with_date(
+                db, ccl.company_id, ccl.company.ticker, cache_map,
+                latest_fin_map.get(ccl.company_id)
+            )
+            mcap_b, mcap_date = _get_market_cap_b_with_date(
+                db, ccl.company_id, ccl.company.ticker, cache_map
+            )
+            companies_data.append({
+                "id": ccl.company_id,
+                "name": ccl.company.name,
+                "name_cn": ccl.company.name_cn,
+                "ticker": ccl.company.ticker,
+                "company_type": ccl.company.company_type,
+                "is_listed": ccl.company.is_listed,
+                "revenue_2024": ccl.company.revenue_2024,
+                "market_share": ccl.market_share,
+                "revenue_share": ccl.revenue_share,
+                "is_leader": ccl.is_leader,
+                "competitive_advantage": ccl.competitive_advantage,
+                "pe_ttm": pe_val,
+                "pe_date": pe_date,
+                "pe_source": pe_src,
+                "revenue_2025_b": _get_revenue_from_cache(cache_map, ccl.company.ticker, fin_2025_map.get(ccl.company_id)),
+                "revenue_source": _get_data_source(cache_map, ccl.company.ticker, "revenue_b"),
+                "current_price": _get_cache_field(cache_map, ccl.company.ticker, "current_price"),
+                "current_price_usd": (_get_cache_field(cache_map, ccl.company.ticker, "current_price_usd")
+                                      or _get_cache_field(cache_map, ccl.company.ticker, "current_price")),
+                "market_cap_b": mcap_b,
+                "market_cap_date": mcap_date,
+                "change_pct": _get_cache_field(cache_map, ccl.company.ticker, "change_pct"),
+                "analyst_pe_2026": getattr(forecast_map.get(ccl.company_id, {}).get(2026), "pe_est", None),
+                "analyst_pe_2027": getattr(forecast_map.get(ccl.company_id, {}).get(2027), "pe_est", None),
+                "analyst_consensus": getattr(forecast_map.get(ccl.company_id, {}).get(2026), "analyst_consensus", None),
+            })
+
         result.append({
             "chain": {
                 "id": cl.id, "name": cl.name, "name_cn": cl.name_cn,
@@ -1906,36 +2007,7 @@ def get_industry_overview(db: Session = Depends(get_db)):
                 "key_drivers": cl.key_drivers,
                 "risks": cl.risks,
             },
-            "companies": [{
-                "id": ccl.company_id,
-                "name": ccl.company.name,
-                "name_cn": ccl.company.name_cn,
-                "ticker": ccl.company.ticker,
-                "company_type": ccl.company.company_type,
-                "is_listed": ccl.company.is_listed,
-                "revenue_2024": ccl.company.revenue_2024,
-                "market_share": ccl.market_share,
-                "revenue_share": ccl.revenue_share,
-                "is_leader": ccl.is_leader,
-                "competitive_advantage": ccl.competitive_advantage,
-                # PE_TTM: 优先使用 StockInfoCache（腾讯 API 实时数据）
-                "pe_ttm": _get_pe_from_cache(cache_map, ccl.company.ticker, latest_fin_map.get(ccl.company_id)),
-                # 数据来源标记: 'tencent_api' | 'seed'
-                "pe_source": _get_data_source(cache_map, ccl.company.ticker, "pe_ttm"),
-                # 2025 营收（亿 USD）: 优先使用 cache 中 yfinance/腾讯数据
-                "revenue_2025_b": _get_revenue_from_cache(cache_map, ccl.company.ticker, fin_2025_map.get(ccl.company_id)),
-                "revenue_source": _get_data_source(cache_map, ccl.company.ticker, "revenue_b"),
-                # 价格数据
-                "current_price": _get_cache_field(cache_map, ccl.company.ticker, "current_price"),
-                "current_price_usd": (_get_cache_field(cache_map, ccl.company.ticker, "current_price_usd")
-                                      or _get_cache_field(cache_map, ccl.company.ticker, "current_price")),
-                "market_cap_b": _get_cache_field(cache_map, ccl.company.ticker, "market_cap_b"),
-                "change_pct": _get_cache_field(cache_map, ccl.company.ticker, "change_pct"),
-                # 分析师预测
-                "analyst_pe_2026": getattr(forecast_map.get(ccl.company_id, {}).get(2026), "pe_est", None),
-                "analyst_pe_2027": getattr(forecast_map.get(ccl.company_id, {}).get(2027), "pe_est", None),
-                "analyst_consensus": getattr(forecast_map.get(ccl.company_id, {}).get(2026), "analyst_consensus", None),
-            } for ccl in companies],
+            "companies": companies_data,
             "supply_demand": [{
                 "period": sd.period, "supply": sd.supply, "demand": sd.demand,
                 "gap_pct": sd.gap_pct, "capacity_utilization": sd.capacity_utilization,
@@ -2135,17 +2207,7 @@ def get_valuation_companies(peer_group: str = None, db: Session = Depends(get_db
     # 获取最新市值
     latest_mcaps = {}
     for c in companies:
-        md = (db.query(MarketData)
-              .filter(MarketData.company_id == c.id)
-              .order_by(MarketData.date.desc())
-              .first())
-        if md and md.market_cap:
-            latest_mcaps[c.id] = md.market_cap
-        else:
-            # 用PE*净利润推算
-            fin = latest_fin.get(c.id)
-            if fin and fin.pe_ttm and fin.net_income:
-                latest_mcaps[c.id] = round(fin.pe_ttm * fin.net_income, 1)
+        latest_mcaps[c.id] = _get_latest_market_cap(db, c.id, latest_fin.get(c.id))
 
     cagr_cache = {}
     for c in companies:
@@ -2212,16 +2274,7 @@ def calculate_valuation(params: ValuationParams, db: Session = Depends(get_db)):
 
     latest_mcaps = {}
     for c in companies:
-        md = (db.query(MarketData)
-              .filter(MarketData.company_id == c.id)
-              .order_by(MarketData.date.desc())
-              .first())
-        if md and md.market_cap:
-            latest_mcaps[c.id] = md.market_cap
-        else:
-            fin = latest_fin.get(c.id)
-            if fin and fin.pe_ttm and fin.net_income:
-                latest_mcaps[c.id] = round(fin.pe_ttm * fin.net_income, 1)
+        latest_mcaps[c.id] = _get_latest_market_cap(db, c.id, latest_fin.get(c.id))
 
     inputs = []
     for c in companies:
@@ -2374,13 +2427,7 @@ def _get_company_financial_data(db: Session, company_id: int) -> tuple:
            .first())
 
     # 市值
-    md = (db.query(MarketData)
-          .filter(MarketData.company_id == company_id)
-          .order_by(MarketData.date.desc())
-          .first())
-    mcap = md.market_cap if (md and md.market_cap) else None
-    if mcap is None and fin and fin.pe_ttm and fin.net_income:
-        mcap = round(fin.pe_ttm * fin.net_income, 1)
+    mcap = _get_latest_market_cap(db, company_id, fin)
 
     # CAGR
     fins = (db.query(Financial)
