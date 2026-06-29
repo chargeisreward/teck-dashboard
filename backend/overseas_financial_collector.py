@@ -317,7 +317,8 @@ def _record_result(db, rec: OverseasFinancialUpdate, success: bool, error: Optio
         else:
             rec.status = "pending"
             if _is_rate_limit(error):
-                rec.next_attempt = now + timedelta(minutes=30 * rec.error_count)
+                # 一旦被限流，t+6h 再尝试，error_count 次后变成 6h*2、12h、…
+                rec.next_attempt = now + timedelta(hours=6 * rec.error_count)
             else:
                 rec.next_attempt = now + timedelta(hours=2 ** rec.error_count)
     db.commit()
@@ -412,3 +413,43 @@ def _skip_all(db, ticker, reason):
         rec.last_error = reason[:500]
         rec.last_attempt = datetime.utcnow()
     db.commit()
+
+
+def reset_rate_limited_backoff(db, hours: int = 6) -> int:
+    """把已经被限流标记过的 pending 任务的 next_attempt 统一推迟。
+
+    用于以下场景：
+      - 调度策略变更后，把所有仍处于 30 分钟旧退避窗口的任务拉回新的 6 小时窗口；
+      - IP 被 yfinance 临时封禁时，把刚被打回去的任务再延后一档，避免雪崩式重试。
+
+    只动 status='pending' 且 error_count > 0 的记录（说明确实撞过限流）；
+    status='success' 或 status='failed' 的不碰。
+    """
+    now = datetime.utcnow()
+    new_attempt = now + timedelta(hours=hours)
+    pending = db.query(OverseasFinancialUpdate).filter(
+        OverseasFinancialUpdate.status == "pending",
+        OverseasFinancialUpdate.error_count > 0,
+    ).all()
+    for rec in pending:
+        rec.next_attempt = new_attempt
+    db.commit()
+    logger.info(f"reset_rate_limited_backoff: {len(pending)} tasks rescheduled to {new_attempt}")
+    return len(pending)
+
+
+if __name__ == "__main__":
+    # 一次性 CLI：python -m overseas_financial_collector reset
+    import sys
+    from database import SessionLocal
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "reset"
+    db = SessionLocal()
+    try:
+        if cmd == "reset":
+            n = reset_rate_limited_backoff(db)
+            print(f"rescheduled {n} rate-limited tasks to t+6h")
+        else:
+            print(f"unknown command: {cmd}")
+            sys.exit(1)
+    finally:
+        db.close()
