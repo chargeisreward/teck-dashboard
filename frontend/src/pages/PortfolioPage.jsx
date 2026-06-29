@@ -5,6 +5,7 @@ import {
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
+import { formatFinancial } from "../utils/formatNumber";
 
 const COLORS = ["#3b82f6", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#06b6d4", "#f59e0b"];
 const TICKER_COLORS = {
@@ -32,7 +33,7 @@ function PriceCard({ ticker, name, price, changePct, peTtm }) {
       <div style={{ fontSize: 22, fontWeight: 700 }}>${fmt(price)}</div>
       <div style={{ fontSize: 13, color }}>
         {fmtPct(changePct)}
-        {peTtm != null ? <span style={{ color: "var(--text-secondary)", marginLeft: 8 }}>PE: {fmt(peTtm, 1)}</span> : null}
+        {peTtm != null ? <span style={{ color: "var(--text-secondary)", marginLeft: 8 }}>PE: {formatFinancial(peTtm, 1)}x</span> : null}
       </div>
     </div>
   );
@@ -421,7 +422,7 @@ function PortfolioPage() {
                             {h.name_cn || h.company_name}
                           </span>
                         </td>
-                        <td>{fmt(h.pe_ttm, 1)}</td>
+                        <td>{h.pe_ttm != null ? `${formatFinancial(h.pe_ttm, 1)}x` : "-"}</td>
                         <td style={{ color: (h.return_1d || 0) >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>{fmtPct(h.return_1d)}</td>
                         <td style={{ color: (h.return_1w || 0) >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>{fmtPct(h.return_1w)}</td>
                         <td style={{ color: (h.return_1m || 0) >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>{fmtPct(h.return_1m)}</td>
@@ -434,7 +435,7 @@ function PortfolioPage() {
                     {/* 组合加权行 */}
                     <tr style={{ fontWeight: 700, background: "rgba(255,255,255,0.04)", borderTop: "2px solid var(--accent-blue)" }}>
                       <td><span style={{ color: "var(--accent-blue)" }}>组合加权</span></td>
-                      <td style={{ color: "var(--accent-blue)" }}>{fmt(tracking.weighted_pe, 1)}</td>
+                      <td style={{ color: "var(--accent-blue)" }}>{tracking.weighted_pe != null ? `${formatFinancial(tracking.weighted_pe, 1)}x` : "-"}</td>
                       <td style={{ color: (tracking.weighted_return_1d || 0) >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>{fmtPct(tracking.weighted_return_1d)}</td>
                       <td style={{ color: (tracking.weighted_return_1w || 0) >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>{fmtPct(tracking.weighted_return_1w)}</td>
                       <td style={{ color: (tracking.weighted_return_1m || 0) >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>{fmtPct(tracking.weighted_return_1m)}</td>

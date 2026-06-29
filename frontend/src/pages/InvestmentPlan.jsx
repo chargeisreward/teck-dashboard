@@ -3,6 +3,7 @@ import { getPriceHistory, getStockInfo } from "../api";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Area, AreaChart,
 } from "recharts";
+import { formatFinancial } from "../utils/formatNumber";
 
 const TICKERS = [
   { ticker: "TSM", name: "台积电 (TSM)", nameCn: "台积电 ADR", color: "#3b82f6" },
@@ -44,17 +45,17 @@ const AIA_TOP10_TOTAL = AIA_HOLDINGS.reduce((s, h) => s + h.weight, 0);
 const EWY_SK_HYNIX_WEIGHT = EWY_HOLDINGS[0].weight;
 const AIA_SK_HYNIX_WEIGHT = AIA_HOLDINGS[5].weight;
 
-function formatCurrency(v) {
+function formatCurrencyTiered(v) {
   if (v == null || isNaN(v)) return "-";
-  if (v >= 1e12) return `$${(v / 1e8).toFixed(0)}亿`;    // 1T = 10000亿
-  if (v >= 1e8) return `$${(v / 1e8).toFixed(1)}亿`;     // 100M+ = 1亿+
-  if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
-  return `$${Number(v).toFixed(2)}`;
+  if (v >= 1e12) return `$${formatFinancial(v / 1e8, 0)}亿`;    // 1T = 10000亿
+  if (v >= 1e8) return `$${formatFinancial(v / 1e8, 1)}亿`;     // 100M+ = 1亿+
+  if (v >= 1e6) return `$${formatFinancial(v / 1e6, 2)}M`;
+  return `$${formatFinancial(v, 2)}`;
 }
 
 function formatLargeNumber(v) {
   if (v == null || isNaN(v)) return "-";
-  return v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatFinancial(v, 2);
 }
 
 function PriceChart({ ticker, color, nameCn, days }) {
@@ -144,10 +145,10 @@ function ValuationCard({ ticker, label, isEtf }) {
       ) : (
         <>
           <div style={{ fontSize: 13, fontWeight: 600 }}>
-            PE: {info?.pe_ttm != null ? info.pe_ttm.toFixed(1) : "-"}
+            PE: {info?.pe_ttm != null ? `${formatFinancial(info.pe_ttm, 1)}x` : "-"}
           </div>
           <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            市值: {formatCurrency(info?.market_cap)}
+            市值: {formatCurrencyTiered(info?.market_cap)}
           </div>
         </>
       )}

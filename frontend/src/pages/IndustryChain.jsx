@@ -4,6 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   BarChart, Bar, Cell,
 } from "recharts";
+import { formatFinancial } from "../utils/formatNumber";
 
 const DIFFICULTY_COLORS = { "极高": "badge-red", "高": "badge-orange", "中": "badge-blue", "低": "badge-green" };
 const CHART_COLORS = ["#3b82f6", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#06b6d4", "#f59e0b", "#ec4899", "#14b8a6", "#8b5cf6"];
@@ -21,14 +22,16 @@ const TYPE_LABELS = {
 function formatPE(pe) {
   if (pe == null) return "-";
   if (pe < 0) return <span title="负收益（EPS < 0），PE无意义">N/A</span>;
-  return `${pe.toFixed(1)}x`;
+  return `${formatFinancial(pe, 1)}x`;
 }
 
 function formatMarketCap(v) {
   if (v == null) return "-";
-  if (v >= 1e12) return `$${(v / 1e8).toFixed(0)}亿`;   // 1T = 10000亿
-  if (v >= 1e8) return `$${(v / 1e8).toFixed(1)}亿`;    // 100M+ = 1亿+
-  return `$${(v / 1e6).toFixed(0)}M`;                    // below 100M, keep M
+  const n = Number(v);
+  if (!Number.isFinite(n)) return "-";
+  if (n >= 1e12) return `$${formatFinancial(n / 1e8, 0)}亿`;
+  if (n >= 1e8) return `$${formatFinancial(n / 1e8, 1)}亿`;
+  return `$${formatFinancial(n / 1e6, 0)}M`;
 }
 
 // ── 实时价格卡片 ──────────────────────────────────────────────────
@@ -590,6 +593,7 @@ function IndustryChain() {
                           <td>{c.is_listed ? <span className="badge badge-green">上市</span> : <span className="badge badge-orange">未上市</span>}</td>
                           <td style={{ fontWeight: c.pe_ttm ? 600 : 400, color: c.pe_ttm && c.pe_ttm > 0 ? "var(--text-primary)" : "var(--text-secondary)", fontSize: 13 }}>
                             {formatPE(c.pe_ttm)}
+                            {c.pe_date && <span style={{ fontSize: 10, color: "#64748b", marginLeft: 4 }}>({c.pe_date})</span>}
                             {c.pe_source === "tencent" && c.pe_ttm > 0 && <span style={{ fontSize: 10, color: "#22c55e", marginLeft: 4 }}>●</span>}
                           </td>
                           <td style={{ fontWeight: c.analyst_pe_2026 ? 600 : 400, color: "#22c55e", fontSize: 13 }}>

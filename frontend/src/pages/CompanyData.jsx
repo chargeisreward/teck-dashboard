@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getCompanyDataBrowse } from "../api";
+import { formatFinancial } from "../utils/formatNumber";
 
 function CompanyData() {
   const [companies, setCompanies] = useState([]);
@@ -118,16 +119,16 @@ function CompanyData() {
                       {c.change_pct != null ? `${c.change_pct >= 0 ? "+" : ""}${c.change_pct}%` : "-"}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "right" }}>
-                      {c.market_cap_b != null ? `${c.market_cap_b.toFixed(0)}` : "-"}
+                      {c.market_cap_b != null ? `${formatFinancial(c.market_cap_b)}亿` : "-"}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "right" }}>
                       {c.pe_ttm != null ? c.pe_ttm.toFixed(1) : "-"}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "right" }}>
-                      {latestFin?.revenue != null ? latestFin.revenue.toFixed(0) : "-"}
+                      {latestFin?.revenue != null ? `$${formatFinancial(latestFin.revenue)}亿` : "-"}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "right" }}>
-                      {latestFin?.net_income != null ? latestFin.net_income.toFixed(0) : "-"}
+                      {latestFin?.net_income != null ? `$${formatFinancial(latestFin.net_income)}亿` : "-"}
                     </td>
                     <td style={{ ...tdStyle, textAlign: "right" }}>
                       {latestFin?.gross_margin != null ? `${latestFin.gross_margin.toFixed(1)}%` : "-"}
@@ -153,8 +154,7 @@ function CompanyData() {
         <span>数据说明:</span>
         <span>实时行情每15分钟刷新</span>
         <span>财务数据来源: Wind API / 年报</span>
-        <span>营收/净利润单位为亿美元</span>
-        <span>市值单位为亿美元</span>
+        <span>市值/营收/净利润单位：亿美元</span>
       </div>
     </div>
   );
