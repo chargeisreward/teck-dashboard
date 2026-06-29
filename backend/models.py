@@ -453,6 +453,9 @@ class StockInfoCache(Base):
 class FxRateCache(Base):
     """USD 交叉汇率缓存（来自公开 CDN）"""
     __tablename__ = "fx_rate_cache"
+    __table_args__ = (
+        UniqueConstraint("base_currency", "date", name="uq_fx_rate_cache_base_date"),
+    )
     id = Column(Integer, primary_key=True, index=True)
     base_currency = Column(String, index=True)   # e.g. KRW
     quote_currency = Column(String, index=True)  # USD
