@@ -96,6 +96,11 @@ class BaseCollector:
             return last.value
         return None
 
+    def _last_observation_value(self, db, indicator_id: int) -> Optional[float]:
+        """最新一次观测的 value（与 _get_previous_value 同义，但语义上更明确，
+        用于 skip_unchanged 判断）。"""
+        return self._get_previous_value(db, indicator_id)
+
     def _compute_change_pct(self, current: float, previous: Optional[float]) -> Optional[float]:
         """计算变化百分比"""
         if previous is None or previous == 0:
@@ -108,13 +113,22 @@ class BaseCollector:
         target_date=None,
         note: str = "",
         data_quality: str = "confirmed",
+        skip_unchanged: bool = True,
     ) -> dict:
         """
         写入观测值 + 自动计算边际变化
         Returns: {"success": True, "value": ..., "change_pct": ..., "date": ...}
 
-        Guard: 拒绝 data_quality='estimated' 写入。CLAUDE.md 第一条：
+        Guard 1: 拒绝 data_quality='estimated' 写入。CLAUDE.md 第一条：
         "No mock/synthetic data"。estimated 数据会污染 DB，宁可报错失败。
+
+        Guard 2 (skip_unchanged=True): 若 new_value == 上一次 observation 的 value
+        （不同日期但同一值），跳过写入。Timeline 仅显示值首次变化的时间点。
+        适用场景：china_customs 月度数据每天 cron 跑、TrendForce 当日未更新
+        仍返回昨日值、AWS spot 价格周末不变等。Collector 可显式传
+        skip_unchanged=False 关闭此行为（例如价格类需要每天固定快照）。
+
+        Idempotency: 同日已有数据 → 直接返回 existing，不写第二行。
         """
         from models import IndicatorObservation
 
@@ -141,7 +155,7 @@ class BaseCollector:
         elif isinstance(target_date, str):
             target_date = datetime.strptime(target_date, "%Y-%m-%d").date()
 
-        # 幂等检查
+        # === 同日幂等检查 ===
         if self._has_data_for_date(db, indicator_id, target_date):
             logger.info(f"Data already exists for {self.indicator_name} on {target_date}, skipping")
             existing = db.query(IndicatorObservation).filter(
@@ -155,6 +169,26 @@ class BaseCollector:
                 "date": str(target_date),
                 "note": "already_exists",
             }
+
+        # === skip_unchanged: 值未变则跳过（按"首次变化"原则） ===
+        if skip_unchanged:
+            last_value = self._last_observation_value(db, indicator_id)
+            if last_value is not None and abs(float(value) - float(last_value)) < 1e-9:
+                last_obs = db.query(IndicatorObservation).filter(
+                    IndicatorObservation.indicator_id == indicator_id
+                ).order_by(IndicatorObservation.date.desc()).first()
+                logger.info(
+                    f"Unchanged value skipped: {self.indicator_name}={value} {self.unit} "
+                    f"(same as {last_obs.date}, no new observation written)"
+                )
+                return {
+                    "success": True,
+                    "skipped": "unchanged_value",
+                    "value": value,
+                    "last_value": last_value,
+                    "last_date": str(last_obs.date),
+                    "date": str(target_date),
+                }
 
         previous_value = self._get_previous_value(db, indicator_id)
         change_pct = self._compute_change_pct(value, previous_value)
