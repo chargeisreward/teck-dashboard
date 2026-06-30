@@ -1,6 +1,10 @@
 """
 产业数据采集器 — 统一入口 + 调度器
 按数据源组织的采集器集合，每个采集器独立文件。
+
+Stub 采集器（distributor_data / hyperscaler_capex / osat_data）已在 2026-06-30
+rebuild 计划中删除——这些只写 estimated 占位值，违反 "No mock/synthetic data" 原则。
+替代方案：hyperscaler_capex 改为 SEC EDGAR XBRL 真实抓取（见 sec_edgar_capex.py）。
 """
 
 from .base import BaseCollector
@@ -11,14 +15,12 @@ from .sources.semi_org import SEMICollector, SEMIWaferCollector
 from .sources.asml_ir import ASMLCollector
 from .sources.nvidia_ir import NVIDIAIRCollector
 from .sources.china_customs import ChinaCustomsICImportCollector, ChinaCustomsICExportCollector
-from .sources.hyperscaler_capex import (
+from .sources.sec_edgar_capex import (
     HyperscalerAmazonCapExCollector, HyperscalerMicrosoftCapExCollector,
     HyperscalerGoogleCapExCollector, HyperscalerMetaCapExCollector,
 )
 from .sources.gpu_cloud import GPUCloudPriceCollector
 from .sources.synopsys_cadence import SynopsysBacklogCollector, CadenceBacklogCollector
-from .sources.distributor_data import ArrowRevenueCollector, AvnetRevenueCollector, WPGRevenueCollector
-from .sources.osat_data import OSATCoWoSCollector, OSATCapExCollector, ASERevenueCollector
 from .sources.odm_server_data import (
     QuantaMonthlyRevenueCollector, WistronMonthlyRevenueCollector,
     InventecMonthlyRevenueCollector, PegatronMonthlyRevenueCollector,
@@ -35,11 +37,12 @@ COLLECTORS = {
     "asml_ir": [ASMLCollector],
     "nvidia_ir": [NVIDIAIRCollector],
     "china_customs": [ChinaCustomsICImportCollector, ChinaCustomsICExportCollector],
-    "hyperscaler_capex": [HyperscalerAmazonCapExCollector, HyperscalerMicrosoftCapExCollector, HyperscalerGoogleCapExCollector, HyperscalerMetaCapExCollector],
+    "sec_edgar_capex": [
+        HyperscalerAmazonCapExCollector, HyperscalerMicrosoftCapExCollector,
+        HyperscalerGoogleCapExCollector, HyperscalerMetaCapExCollector,
+    ],
     "gpu_cloud": [GPUCloudPriceCollector],
     "synopsys_cadence": [SynopsysBacklogCollector, CadenceBacklogCollector],
-    "distributor_data": [ArrowRevenueCollector, AvnetRevenueCollector, WPGRevenueCollector],
-    "osat_data": [OSATCoWoSCollector, OSATCapExCollector, ASERevenueCollector],
     "odm_server": [QuantaMonthlyRevenueCollector, WistronMonthlyRevenueCollector,
                    InventecMonthlyRevenueCollector, PegatronMonthlyRevenueCollector,
                    WiwynnMonthlyRevenueCollector],
