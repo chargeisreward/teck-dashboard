@@ -24,6 +24,10 @@ from .sources.vantage_gpu_price import (
     H200EightGPUPriceCollector, B200EightGPUPriceCollector,
     A100EightGPUPriceCollector,
 )
+from .sources.trendforce_dram_price import (
+    DDR5SpotPriceCollector, DDR5ContractPriceCollector,
+    DDR4SpotPriceCollector, DDR4ContractPriceCollector,
+)
 from .sources.synopsys_cadence import SynopsysBacklogCollector, CadenceBacklogCollector
 from .sources.odm_server_data import (
     QuantaMonthlyRevenueCollector, WistronMonthlyRevenueCollector,
@@ -49,6 +53,10 @@ COLLECTORS = {
         H100SingleGPUPriceCollector, H100EightGPUPriceCollector,
         H200EightGPUPriceCollector, B200EightGPUPriceCollector,
         A100EightGPUPriceCollector,
+    ],
+    "trendforce_dram_price": [
+        DDR5SpotPriceCollector, DDR5ContractPriceCollector,
+        DDR4SpotPriceCollector, DDR4ContractPriceCollector,
     ],
     "synopsys_cadence": [SynopsysBacklogCollector, CadenceBacklogCollector],
     "odm_server": [QuantaMonthlyRevenueCollector, WistronMonthlyRevenueCollector,
