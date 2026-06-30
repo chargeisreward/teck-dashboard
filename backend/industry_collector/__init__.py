@@ -19,7 +19,11 @@ from .sources.sec_edgar_capex import (
     HyperscalerAmazonCapExCollector, HyperscalerMicrosoftCapExCollector,
     HyperscalerGoogleCapExCollector, HyperscalerMetaCapExCollector,
 )
-from .sources.gpu_cloud import GPUCloudPriceCollector
+from .sources.vantage_gpu_price import (
+    H100SingleGPUPriceCollector, H100EightGPUPriceCollector,
+    H200EightGPUPriceCollector, B200EightGPUPriceCollector,
+    A100EightGPUPriceCollector,
+)
 from .sources.synopsys_cadence import SynopsysBacklogCollector, CadenceBacklogCollector
 from .sources.odm_server_data import (
     QuantaMonthlyRevenueCollector, WistronMonthlyRevenueCollector,
@@ -41,7 +45,11 @@ COLLECTORS = {
         HyperscalerAmazonCapExCollector, HyperscalerMicrosoftCapExCollector,
         HyperscalerGoogleCapExCollector, HyperscalerMetaCapExCollector,
     ],
-    "gpu_cloud": [GPUCloudPriceCollector],
+    "vantage_gpu_price": [
+        H100SingleGPUPriceCollector, H100EightGPUPriceCollector,
+        H200EightGPUPriceCollector, B200EightGPUPriceCollector,
+        A100EightGPUPriceCollector,
+    ],
     "synopsys_cadence": [SynopsysBacklogCollector, CadenceBacklogCollector],
     "odm_server": [QuantaMonthlyRevenueCollector, WistronMonthlyRevenueCollector,
                    InventecMonthlyRevenueCollector, PegatronMonthlyRevenueCollector,
