@@ -112,8 +112,29 @@ class BaseCollector:
         """
         写入观测值 + 自动计算边际变化
         Returns: {"success": True, "value": ..., "change_pct": ..., "date": ...}
+
+        Guard: 拒绝 data_quality='estimated' 写入。CLAUDE.md 第一条：
+        "No mock/synthetic data"。estimated 数据会污染 DB，宁可报错失败。
         """
         from models import IndicatorObservation
+
+        # === Guard: estimated 禁止写入 ===
+        if data_quality == "estimated":
+            logger.error(
+                f"BLOCKED estimated write: {self.indicator_name}={value} {self.unit}. "
+                f"请实现真实数据源或删除此 collector。 "
+                f"详见 CLAUDE.md 'No mock/synthetic data'。"
+            )
+            return {
+                "success": False,
+                "error": "estimated_quality_blocked",
+                "source": self.source,
+                "indicator": self.indicator_name,
+                "note": (
+                    f"value={value} 未写入。estimated 数据禁止入库。 "
+                    f"请实现真实抓取或删除 collector。"
+                ),
+            }
 
         if target_date is None:
             target_date = date.today()
