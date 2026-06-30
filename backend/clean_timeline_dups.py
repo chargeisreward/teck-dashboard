@@ -19,18 +19,17 @@ def plan_timeline_cleanup(conn):
         SELECT id, event_time, event_type, title, value_display, source_name
         FROM timeline_events
         WHERE event_type = 'collection'
-        ORDER BY title, value_display, event_time ASC
+        ORDER BY title, event_time ASC
     ''')
     rows = c.fetchall()
 
     keep = []
     delete = []
-    seen = {}  # (title, value_display) -> first id
+    seen = set()  # title -> first id
     for r in rows:
         row_id, event_time, event_type, title, value_display, source_name = r
-        key = (title, value_display)
-        if key not in seen:
-            seen[key] = row_id
+        if title not in seen:
+            seen.add(title)
             keep.append(row_id)
         else:
             delete.append(row_id)
