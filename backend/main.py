@@ -596,6 +596,16 @@ def trigger_industry_collect(
                 if not ind:
                     continue
 
+                # 如果 collector 报告 skip（unchanged_value / already_exists / no_data），
+                # 不创建 TimelineEvent，避免 timeline 被重复条目刷屏。
+                result_payload = r.get("result", {}) or {}
+                if result_payload.get("skipped") in ("unchanged_value", "already_exists"):
+                    logger.debug(
+                        f"Skip timeline for {indicator_name}: "
+                        f"{result_payload.get('skipped')}"
+                    )
+                    continue
+
                 # 获取刚写入的最新 observation
                 obs = (
                     db.query(ObsModel)
