@@ -6,6 +6,8 @@ import {
   getIndustryIndicators, getIndustryDataSources, triggerIndustryCollect, getIndustryIndicator,
 } from "../api";
 
+import { Icon } from "../components/ui";
+
 const CATEGORY_ORDER = [
   "raw_materials", "equipment", "eda", "chip_design", "foundry",
   "memory", "packaging", "distribution", "end_market", "gpu_cloud",
@@ -18,10 +20,17 @@ const CATEGORY_CN = {
   end_market: "终端市场", gpu_cloud: "GPU云",
 };
 
-const CATEGORY_ICONS = {
-  raw_materials: "🧪", equipment: "🔧", eda: "💻",
-  chip_design: "📐", foundry: "🏭", memory: "💾",
-  packaging: "📦", distribution: "📡", end_market: "📊", gpu_cloud: "☁️",
+const CATEGORY_ICON_NAMES = {
+  raw_materials: "rawMaterials",
+  equipment: "equipment",
+  eda: "eda",
+  chip_design: "chipDesign",
+  foundry: "foundry",
+  memory: "memory",
+  packaging: "packaging",
+  distribution: "distribution",
+  end_market: "endMarket",
+  gpu_cloud: "gpuCloud",
 };
 
 function SourceStatusBadge({ source, lastUpdated, status }) {
@@ -91,7 +100,10 @@ function IndicatorCard({ indicator, onExpand, isExpanded }) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, fontSize: 12 }}>
             {change_pct != null && (
               <span style={{ color: change_pct >= 0 ? "var(--success, #22c55e)" : "var(--error, #ef4444)", fontWeight: 600 }}>
-                {change_pct >= 0 ? "▲" : "▼"} {change_pct > 0 ? "+" : ""}{change_pct.toFixed(1)}%
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 2, color: change_pct >= 0 ? "var(--success)" : "var(--error)", fontWeight: 600 }}>
+                <Icon name={change_pct >= 0 ? "up" : "down"} size={10} />
+                {change_pct > 0 ? "+" : ""}{change_pct.toFixed(1)}%
+              </span>
               </span>
             )}
             {latest_date && <span style={{ color: "var(--text-secondary, #94a3b8)", fontSize: 11 }}>{latest_date.slice(0, 7)}</span>}
@@ -117,13 +129,14 @@ function SupplyChainSection({ category, indicators, expanded, onToggle, onExpand
     <div style={{ marginBottom: 16 }}>
       <div onClick={onToggle}
         style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", cursor: "pointer", borderRadius: "6px 6px 0 0", background: "var(--card-bg, #1e293b)", borderBottom: expanded ? "1px solid var(--border, #334155)" : "none", userSelect: "none" }}>
-        <span style={{ fontSize: 16 }}>{CATEGORY_ICONS[category]}</span>
+        <span style={{ fontSize: 16, display: "inline-flex", alignItems: "center" }}><Icon name={CATEGORY_ICON_NAMES[category]} size={18} /></span>
         <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text, #f1f5f9)" }}>{CATEGORY_CN[category] || category}</span>
         <span style={{ fontSize: 11, color: "var(--text-secondary, #94a3b8)" }}>
           ({indicators.length}项{hasData ? `, ${indicators.filter(i => i.latest_value != null).length}项有数据` : ""})
         </span>
-        <span style={{ marginLeft: "auto", color: "var(--text-secondary, #94a3b8)", fontSize: 12 }}>
-          {expanded ? "收起 ▲" : "展开 ▼"}
+        <span style={{ marginLeft: "auto", color: "var(--text-secondary, #94a3b8)", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 2 }}>
+          {expanded ? "收起" : "展开"}
+          <Icon name={expanded ? "collapse" : "expand"} size={12} />
         </span>
       </div>
       {expanded && (
@@ -233,7 +246,10 @@ function IndustryData() {
 
       <div style={{ marginTop: 20, padding: "8px 12px", fontSize: 11, color: "var(--text-secondary)", borderTop: "1px solid var(--border, #334155)", display: "flex", gap: 16, flexWrap: "wrap" }}>
         <span>图例:</span>
-        <span>▲ 上升 ▼ 下降</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <Icon name="up" size={10} /> 上升
+          <Icon name="down" size={10} /> 下降
+        </span>
         <span style={{ color: "var(--success, #22c55e)" }}>● 今日更新</span>
         <span style={{ color: "var(--warning, #eab308)" }}>● 3日内</span>
         <span style={{ color: "var(--error, #ef4444)" }}>● 超3日</span>

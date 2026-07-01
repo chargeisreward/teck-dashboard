@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Icon } from "../ui";
 import { LAYER_COLORS } from "../../data/techGlossaryData";
 
 function StorageSubLayerCard({ layer, color }) {
@@ -31,9 +32,11 @@ function StorageSubLayerCard({ layer, color }) {
             marginLeft: 12,
             fontSize: 20,
             color: "var(--text-secondary)",
+            display: "inline-flex",
+            alignItems: "center",
           }}
         >
-          ▼
+          <Icon name="expand" size={18} />
         </span>
       </div>
 
@@ -137,9 +140,11 @@ function LayerCard({ layer, color, index }) {
               fontSize: 20,
               color: "var(--text-secondary)",
               transition: "transform 0.2s",
+              display: "inline-flex",
+              alignItems: "center",
             }}
           >
-            ▼
+            <Icon name="expand" size={18} />
           </span>
         </div>
       </div>
@@ -216,7 +221,8 @@ function ComponentCard({ comp, color }) {
       </div>
 
       <button className="comp-detail-toggle" onClick={() => setExpanded(!expanded)}>
-        {expanded ? "收起详情 ▲" : "展开技术详情 ▼"}
+        {expanded ? "收起详情" : "展开技术详情"}
+        <Icon name={expanded ? "collapse" : "expand"} size={12} />
       </button>
 
       {expanded && (

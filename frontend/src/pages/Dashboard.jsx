@@ -7,6 +7,7 @@ import { getDashboardOverview, getMarketData, refreshFollowPrices } from "../api
 import PriceTicker from "../components/PriceTicker";
 import HotStocksPanel from "../components/HotStocksPanel";
 import { formatFinancial } from "../utils/formatNumber";
+import { EmptyState } from "../components/ui";
 
 const COLORS = ["#3b82f6", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#06b6d4", "#f59e0b", "#ec4899"];
 
@@ -125,7 +126,7 @@ function Dashboard() {
               {chain.avg_change_pct != null && (
                 <div className="chain-card-metric">
                   <span className="metric-label">当日平均涨跌</span>
-                  <span className={`metric-value ${chain.avg_change_pct >= 0 ? "up" : "down"}`}>
+                  <span className={`metric-value font-numeric ${chain.avg_change_pct >= 0 ? "up" : "down"}`}>
                     {chain.avg_change_pct >= 0 ? "+" : ""}{chain.avg_change_pct}%
                   </span>
                 </div>
@@ -133,19 +134,19 @@ function Dashboard() {
               {chain.total_market_cap != null && (
                 <div className="chain-card-metric">
                   <span className="metric-label">估值合计</span>
-                  <span className="metric-value">${formatFinancial(chain.total_market_cap, 0)}亿</span>
+                  <span className="metric-value font-numeric">${formatFinancial(chain.total_market_cap, 0)}亿</span>
                 </div>
               )}
               {chain.total_revenue_ttm != null && (
                 <div className="chain-card-metric">
                   <span className="metric-label">TTM 营收合计</span>
-                  <span className="metric-value">${formatFinancial(chain.total_revenue_ttm, 0)}亿</span>
+                  <span className="metric-value font-numeric">${formatFinancial(chain.total_revenue_ttm, 0)}亿</span>
                 </div>
               )}
               {chain.total_net_income_ttm != null && (
                 <div className="chain-card-metric">
                   <span className="metric-label">TTM 利润合计</span>
-                  <span className="metric-value">${formatFinancial(chain.total_net_income_ttm, 0)}亿</span>
+                  <span className="metric-value font-numeric">${formatFinancial(chain.total_net_income_ttm, 0)}亿</span>
                 </div>
               )}
             </div>
@@ -162,9 +163,11 @@ function Dashboard() {
           </span>
         </div>
         {overview.core_companies.length === 0 ? (
-          <div style={{ padding: "20px 0", textAlign: "center", color: "var(--text-secondary)", fontSize: 14 }}>
-            尚未关注任何公司。请在"产业链全景"或"公司列表"页面关注最多 7 家公司作为核心公司。
-          </div>
+          <EmptyState
+            icon="portfolio"
+            title="尚未关注任何公司"
+            description="请在「产业链全景」或「公司列表」页面关注最多 7 家公司作为核心公司"
+          />
         ) : (
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             {overview.core_companies.map((c) => (

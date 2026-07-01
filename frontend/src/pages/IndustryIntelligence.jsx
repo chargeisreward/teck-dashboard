@@ -5,6 +5,8 @@ import {
 } from "recharts";
 import { getIndustryIntelligence, getIndustryIndicator, createJudgmentLog } from "../api";
 
+import { Icon, Badge, EmptyState } from "../components/ui";
+
 // ── Supply chain categories ──
 const CATEGORY_ORDER = [
   "raw_materials", "equipment", "eda", "chip_design", "foundry",
@@ -18,10 +20,17 @@ const CATEGORY_CN = {
   end_market: "终端市场", gpu_cloud: "GPU云",
 };
 
-const CATEGORY_ICONS = {
-  raw_materials: "🧪", equipment: "🔧", eda: "💻",
-  chip_design: "📐", foundry: "🏭", memory: "💾",
-  packaging: "📦", distribution: "📡", end_market: "📊", gpu_cloud: "☁️",
+const CATEGORY_ICON_NAMES = {
+  raw_materials: "rawMaterials",
+  equipment: "equipment",
+  eda: "eda",
+  chip_design: "chipDesign",
+  foundry: "foundry",
+  memory: "memory",
+  packaging: "packaging",
+  distribution: "distribution",
+  end_market: "endMarket",
+  gpu_cloud: "gpuCloud",
 };
 
 const TIER_CONFIG = {
@@ -55,48 +64,38 @@ function ExpandedDetail({ indicator }) {
   }, [indicator?.id]);
 
   return (
-    <div style={{
-      marginTop: 10, padding: "12px 14px",
-      background: "rgba(59,130,246,0.04)",
-      border: "1px solid rgba(59,130,246,0.15)",
-      borderRadius: 8, width: "100%",
-    }}>
-      {/* 行业景气度 */}
+    <div className="ii-indicator-card" style={{ width: "100%", marginTop: 10, borderColor: "var(--accent-border)" }}>
       {indicator.industry_impact && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4, fontWeight: 600 }}>📊 行业景气度</div>
-          <div style={{
-            fontSize: 12, color: "var(--text)", lineHeight: 1.5, padding: "6px 10px",
-            background: "rgba(34,197,94,0.06)", borderRadius: 6, borderLeft: "2px solid #22c55e",
-          }}>{indicator.industry_impact}</div>
+        <div className="ii-impact-block">
+          <div className="ii-impact-block-label">
+            <Icon name="overview" size={12} /> 行业景气度
+          </div>
+          <div className="ii-impact-block-content success">{indicator.industry_impact}</div>
         </div>
       )}
 
-      {/* 产业链影响 */}
       {indicator.chain_impact && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4, fontWeight: 600 }}>🔗 产业链影响</div>
-          <div style={{
-            fontSize: 12, color: "var(--text)", lineHeight: 1.5, padding: "6px 10px",
-            background: "rgba(59,130,246,0.06)", borderRadius: 6, borderLeft: "2px solid #3b82f6",
-          }}>{indicator.chain_impact}</div>
+        <div className="ii-impact-block">
+          <div className="ii-impact-block-label">
+            <Icon name="industryChain" size={12} /> 产业链影响
+          </div>
+          <div className="ii-impact-block-content accent">{indicator.chain_impact}</div>
         </div>
       )}
 
-      {/* 重点公司影响 */}
       {indicator.company_impact && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4, fontWeight: 600 }}>🏢 重点公司</div>
-          <div style={{
-            fontSize: 12, color: "var(--text)", lineHeight: 1.5, padding: "6px 10px",
-            background: "rgba(245,158,11,0.06)", borderRadius: 6, borderLeft: "2px solid #f59e0b",
-          }}>{indicator.company_impact}</div>
+        <div className="ii-impact-block">
+          <div className="ii-impact-block-label">
+            <Icon name="companies" size={12} /> 重点公司
+          </div>
+          <div className="ii-impact-block-content warning">{indicator.company_impact}</div>
         </div>
       )}
 
-      {/* 历史曲线 */}
-      <div style={{ marginTop: 8 }}>
-        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 6, fontWeight: 600 }}>📈 历史趋势</div>
+      <div>
+        <div className="ii-history-chart-title">
+          <Icon name="sequence" size={12} /> 历史趋势
+        </div>
         {loadingObs ? (
           <div style={{ fontSize: 11, color: "var(--text-secondary)", padding: 20, textAlign: "center" }}>加载中...</div>
         ) : observations.length > 1 ? (
@@ -112,16 +111,15 @@ function ExpandedDetail({ indicator }) {
             </ResponsiveContainer>
           </div>
         ) : (
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", padding: 10, textAlign: "center" }}>暂无历史数据</div>
+          <EmptyState icon="sequence" title="暂无历史数据" />
         )}
       </div>
 
-      {/* 关联标的 */}
       {indicator.related_tickers && (
-        <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 8 }}>
+        <div className="ii-related-tickers">
           <span>关联: </span>
           {indicator.related_tickers.split(",").map((t) => (
-            <span key={t} style={{ padding: "1px 6px", background: "rgba(59,130,246,0.1)", borderRadius: 3, marginLeft: 4, fontSize: 10 }}>{t.trim()}</span>
+            <span key={t} className="ii-related-ticker-tag">{t.trim()}</span>
           ))}
         </div>
       )}
@@ -138,34 +136,27 @@ function IndicatorCard({ indicator, onToggleExpand, isExpanded }) {
   const tierCfg = TIER_CONFIG[indicator.tier] || TIER_CONFIG[3];
 
   return (
-    <div style={{
-      background: "var(--card-bg, #1e293b)", border: isExpanded ? "1px solid #3b82f6" : "1px solid var(--border, #334155)",
-      borderRadius: 8, padding: "12px 14px", minWidth: 220, flex: "1 1 260px",
-      transition: "border-color 0.2s",
-    }}>
+    <div className={`ii-indicator-card${isExpanded ? " ii-indicator-card-expanded" : ""}`}>
       {/* Header: name + tier badge */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text, #f1f5f9)" }}>
-          {indicator.name_cn || indicator.name}
-        </span>
-        <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 3, background: `${tierCfg.color}22`, color: tierCfg.color, fontWeight: 600 }}>
-          {tierCfg.label}
-        </span>
+      <div className="ii-indicator-card-header">
+        <span className="ii-indicator-card-name">{indicator.name_cn || indicator.name}</span>
+        <Badge variant="default" style={{ color: tierCfg.color, background: `${tierCfg.color}22` }}>{tierCfg.label}</Badge>
       </div>
 
       {hasData ? (
         <>
           {/* 当前值 */}
-          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text, #f1f5f9)", lineHeight: 1.2 }}>
+          <div className="ii-indicator-card-value font-numeric">
             {typeof indicator.latest_value === "number" ? indicator.latest_value.toLocaleString() : indicator.latest_value}
-            {indicator.unit && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-secondary)", marginLeft: 4 }}>{indicator.unit}</span>}
+            {indicator.unit && <span className="ii-indicator-card-unit">{indicator.unit}</span>}
           </div>
 
           {/* 环比变化 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2, fontSize: 12 }}>
+          <div className="ii-indicator-card-change">
             {change != null && (
-              <span style={{ color: change >= 0 ? "var(--success, #22c55e)" : "var(--error, #ef4444)", fontWeight: 600 }}>
-                {change >= 0 ? "▲" : "▼"} {change > 0 ? "+" : ""}{change.toFixed(1)}%
+              <span style={{ color: change >= 0 ? "var(--success, #22c55e)" : "var(--error, #ef4444)", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 2 }}>
+                <Icon name={change >= 0 ? "up" : "down"} size={10} />
+                {change > 0 ? "+" : ""}{change.toFixed(1)}%
               </span>
             )}
             {indicator.latest_date && (
@@ -175,55 +166,54 @@ function IndicatorCard({ indicator, onToggleExpand, isExpanded }) {
 
           {/* 边际变化 */}
           {marginalChange != null && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 1, fontSize: 11 }}>
+            <div className="ii-indicator-card-marginal">
               <span style={{
                 color: marginalChange >= 0 ? "var(--success, #22c55e)" : "var(--error, #ef4444)",
                 fontWeight: 500,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 2,
               }}>
-                {marginalChange >= 0 ? "↑" : "↓"} {marginalChange > 0 ? "+" : ""}{marginalChange.toFixed(1)}%
+                <Icon name={marginalChange >= 0 ? "up" : "down"} size={10} />
+                {marginalChange > 0 ? "+" : ""}{marginalChange.toFixed(1)}%
               </span>
               {windowLabel && (
                 <span style={{ color: "var(--text-secondary)", fontSize: 10 }}>{windowLabel}</span>
               )}
-              {/* 景气度方向指示 */}
-              <span style={{
-                marginLeft: "auto", fontSize: 10, padding: "1px 6px", borderRadius: 3,
-                background: marginalChange > 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-                color: marginalChange > 0 ? "#22c55e" : "#ef4444",
-                fontWeight: 600,
-              }}>
+              <Badge
+                variant={marginalChange > 0 ? "success" : "error"}
+                style={{ marginLeft: "auto" }}
+              >
                 景气{marginalChange > 0 ? "↑" : "↓"}
-              </span>
+              </Badge>
             </div>
           )}
 
           {/* AI分析 */}
           {indicator.analysis && (
-            <div style={{ marginTop: 6, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5, padding: "6px 8px", background: "rgba(59,130,246,0.06)", borderRadius: 6, borderLeft: "2px solid #3b82f6" }}>
-              {indicator.analysis}
-            </div>
+            <div className="ii-indicator-card-analysis">{indicator.analysis}</div>
           )}
 
           {/* Source */}
-          <div style={{ marginTop: 6, fontSize: 10, color: "var(--text-secondary)" }}>
+          <div className="ii-indicator-card-source">
             {indicator.source_url ? (
-              <a href={indicator.source_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent, #3b82f6)" }}>{indicator.source} ↗</a>
+              <a href={indicator.source_url} target="_blank" rel="noopener noreferrer">{indicator.source} ↗</a>
             ) : (
               <span>{indicator.source}</span>
             )}
           </div>
 
           {/* 展开按钮 */}
-          <button onClick={() => onToggleExpand?.(indicator)}
-            style={{ background: "none", border: "none", color: "var(--accent, #3b82f6)", cursor: "pointer", fontSize: 11, padding: 0, marginTop: 6 }}>
-            {isExpanded ? "收起分析 ▲" : "展开影响分析 ▼"}
+          <button onClick={() => onToggleExpand?.(indicator)} className="ii-indicator-card-toggle">
+            {isExpanded ? "收起分析" : "展开影响分析"}
+            <Icon name={isExpanded ? "collapse" : "expand"} size={10} />
           </button>
 
           {/* 展开的详细面板 */}
           {isExpanded && <ExpandedDetail indicator={indicator} />}
         </>
       ) : (
-        <div style={{ fontSize: 13, color: "var(--text-secondary)", padding: "12px 0" }}>暂无数据</div>
+        <EmptyState icon="sequence" title="暂无数据" />
       )}
     </div>
   );
@@ -243,40 +233,27 @@ function ChainSection({ category, indicators, expanded, onToggle, onExpandCard, 
     : null;
 
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div onClick={onToggle} style={{
-        display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
-        cursor: "pointer", borderRadius: "6px 6px 0 0",
-        background: "var(--card-bg, #1e293b)",
-        borderBottom: expanded ? "1px solid var(--border, #334155)" : "none",
-        userSelect: "none",
-      }}>
-        <span style={{ fontSize: 14 }}>{CATEGORY_ICONS[category]}</span>
-        <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text, #f1f5f9)" }}>
-          {CATEGORY_CN[category] || category}
-        </span>
+    <div className="ii-chain-section">
+      <div onClick={onToggle} className="ii-chain-section-header">
+        <span><Icon name={CATEGORY_ICON_NAMES[category]} size={18} /></span>
+        <span className="ii-chain-section-title">{CATEGORY_CN[category] || category}</span>
         {avgMarginal != null && (
-          <span style={{
-            fontSize: 11, padding: "1px 6px", borderRadius: 3,
-            background: avgMarginal > 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-            color: avgMarginal > 0 ? "#22c55e" : "#ef4444",
-            fontWeight: 600,
-          }}>
-            景气{avgMarginal > 0 ? "↑" : "↓"} {avgMarginal > 0 ? "+" : ""}{avgMarginal.toFixed(1)}%
-          </span>
+          <Badge variant={avgMarginal > 0 ? "success" : "error"}>
+            景气
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+              <Icon name={avgMarginal > 0 ? "up" : "down"} size={10} />
+              {avgMarginal > 0 ? "+" : ""}{avgMarginal.toFixed(1)}%
+            </span>
+          </Badge>
         )}
-        <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>({indicators.length}项)</span>
-        <span style={{ marginLeft: "auto", color: "var(--text-secondary)", fontSize: 12 }}>
-          {expanded ? "收起 ▲" : "展开 ▼"}
+        <span className="ii-chain-section-count">({indicators.length}项)</span>
+        <span className="ii-chain-section-toggle">
+          {expanded ? "收起" : "展开"}
+          <Icon name={expanded ? "collapse" : "expand"} size={12} />
         </span>
       </div>
       {expanded && (
-        <div style={{
-          padding: 12, background: "var(--card-bg-alt, #0f172a)",
-          border: "1px solid var(--border, #334155)", borderTop: "none",
-          borderRadius: "0 0 8px 8px",
-          display: "flex", flexWrap: "wrap", gap: 10,
-        }}>
+        <div className="ii-chain-section-body">
           {indicators.map((ind) => (
             <IndicatorCard key={ind.id} indicator={ind}
               onToggleExpand={onExpandCard}

@@ -6,6 +6,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { formatFinancial } from "../utils/formatNumber";
+import { EmptyState } from "../components/ui";
 
 const COLORS = ["#3b82f6", "#22c55e", "#a855f7", "#f97316", "#ef4444", "#06b6d4", "#f59e0b"];
 const TICKER_COLORS = {
@@ -149,11 +150,11 @@ function PortfolioPage() {
           </div>
         </div>
         <div className="card" style={{ textAlign: "center", padding: 60 }}>
-          <p style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>📁</p>
-          <h3 style={{ marginBottom: 8 }}>暂无关注公司</h3>
-          <p style={{ color: "var(--text-secondary)" }}>
-            前往市场概览页面，点击公司卡片上的 ★ 关注按钮添加关注
-          </p>
+          <EmptyState
+            icon="portfolio"
+            title="暂无关注公司"
+            description="前往市场概览页面，点击公司卡片上的关注按钮添加关注"
+          />
         </div>
       </div>
     );

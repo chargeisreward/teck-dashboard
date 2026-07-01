@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { Icon } from "./components/ui";
 import Dashboard from "./pages/Dashboard";
 import Companies from "./pages/Companies";
 import IndustryChain from "./pages/IndustryChain";
@@ -24,25 +25,65 @@ function App() {
           <h1>Teck Dashboard</h1>
           <p className="subtitle">AI 芯片产业链分析平台</p>
           <ul className="nav-list">
-            <li><NavLink to="/overview" end>📊 市场概览</NavLink></li>
-            <li><NavLink to="/portfolio">📁 跟踪组合</NavLink></li>
-            <li style={{ marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-              <span style={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: 1 }}>全景</span>
+            <li>
+              <NavLink to="/overview" end>
+                <Icon name="overview" size={18} /> 市场概览
+              </NavLink>
             </li>
-            <li><NavLink to="/industry-chain">🔗 产业链</NavLink></li>
-            <li><NavLink to="/tech-glossary">📖 技术栈</NavLink></li>
-            <li><NavLink to="/companies">🏢 龙头公司</NavLink></li>
-            <li><NavLink to="/investment-plan">📋 台积电与海力士</NavLink></li>
-            <li style={{ marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-              <span style={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: 1 }}>情报</span>
+            <li>
+              <NavLink to="/portfolio">
+                <Icon name="portfolio" size={18} /> 跟踪组合
+              </NavLink>
             </li>
-            <li><NavLink to="/industry-intelligence" end>⚡ 产业情报-截面</NavLink></li>
-            <li><NavLink to="/industry-intelligence/sequence">📅 产业情报-序时</NavLink></li>
             <li style={{ marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
-              <span style={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: 1 }}>数据</span>
+              <span className="nav-section-label">全景</span>
             </li>
-            <li><NavLink to="/company-data">📊 数据浏览-公司</NavLink></li>
-            <li><NavLink to="/industry-data">📈 数据浏览-产业</NavLink></li>
+            <li>
+              <NavLink to="/industry-chain">
+                <Icon name="industryChain" size={18} /> 产业链
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to="/tech-glossary">
+                <Icon name="techGlossary" size={18} /> 技术栈
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to="/companies">
+                <Icon name="companies" size={18} /> 龙头公司
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to="/investment-plan">
+                <Icon name="investmentPlan" size={18} /> 台积电与海力士
+              </NavLink>
+            </li>
+            <li style={{ marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+              <span className="nav-section-label">情报</span>
+            </li>
+            <li>
+              <NavLink to="/industry-intelligence" end>
+                <Icon name="industryIntelligence" size={18} /> 产业情报-截面
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to="/industry-intelligence/sequence">
+                <Icon name="sequence" size={18} /> 产业情报-序时
+              </NavLink>
+            </li>
+            <li style={{ marginTop: 8, borderTop: "1px solid var(--border)", paddingTop: 8 }}>
+              <span className="nav-section-label">数据</span>
+            </li>
+            <li>
+              <NavLink to="/company-data">
+                <Icon name="companyData" size={18} /> 数据浏览-公司
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to="/industry-data">
+                <Icon name="industryData" size={18} /> 数据浏览-产业
+              </NavLink>
+            </li>
           </ul>
         </nav>
         <main className="main-content">

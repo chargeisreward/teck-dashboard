@@ -3,6 +3,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { getIndicators, getIndicatorCategories, getIndicatorObservations } from "../api";
+import { Icon, Badge, EmptyState } from "../components/ui";
 
 const CATEGORY_COLORS = {
   price_supply: "#3b82f6",
@@ -101,10 +102,10 @@ function KeyIndicators() {
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                 <h3 style={{ margin: 0 }}>{selected.name_cn || selected.name}</h3>
-                <span className={`badge ${selected.is_automated ? "badge-green" : "badge-orange"}`}>
+                <Badge variant={selected.is_automated ? "success" : "warning"}>
                   {selected.is_automated ? "可自动采集" : "需手动采集"}
-                </span>
-                <span style={{ fontSize: 12, color: "var(--text-secondary)", background: "rgba(255,255,255,0.05)", padding: "2px 8px", borderRadius: 4 }}>
+                </Badge>
+                <span style={{ fontSize: 12, color: "var(--text-secondary)", background: "rgba(255,255,255,0.05)", padding: "2px 8px", borderRadius: "var(--radius-sm)" }}>
                   {freshnessLabel(selected)}
                 </span>
               </div>
@@ -112,11 +113,18 @@ function KeyIndicators() {
             </div>
             {latestObs && (
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: "var(--accent-blue)" }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: "var(--accent)" }} className="font-numeric">
                   {latestObs.value} <span style={{ fontSize: 14, fontWeight: 400, color: "var(--text-secondary)" }}>{selected.unit}</span>
                 </div>
                 {latestObs.change_pct != null && (
-                  <div style={{ fontSize: 13, color: latestObs.change_pct > 0 ? "var(--accent-green)" : "var(--accent-red)" }}>
+                  <div style={{
+                    fontSize: 13,
+                    color: latestObs.change_pct > 0 ? "var(--success)" : "var(--error)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 2,
+                  }}>
+                    <Icon name={latestObs.change_pct > 0 ? "up" : "down"} size={11} />
                     {latestObs.change_pct > 0 ? "+" : ""}{latestObs.change_pct}% 较前值
                   </div>
                 )}
@@ -151,25 +159,29 @@ function KeyIndicators() {
           </div>
 
           {selected.collection_method && (
-            <div style={{ padding: "10px 14px", background: "rgba(249,115,22,0.06)", borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
-              <span style={{ fontWeight: 600, color: "var(--accent-orange)" }}>采集方法: </span>
+            <div className="timeline-impact-block warning">
+              <span className="timeline-impact-label" style={{ color: "var(--warning)" }}>采集方法: </span>
               {selected.collection_method}
             </div>
           )}
 
           {/* 趋势图 */}
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
-              <YAxis stroke="#94a3b8" fontSize={12} />
-              <Tooltip
-                formatter={(val) => [`${val} ${selected.unit || ""}`]}
-                contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8 }}
-              />
-              <Line type="monotone" dataKey="value" stroke={CATEGORY_COLORS[selected.category] || "#3b82f6"} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
+                <YAxis stroke="#94a3b8" fontSize={12} />
+                <Tooltip
+                  formatter={(val) => [`${val} ${selected.unit || ""}`]}
+                  contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8 }}
+                />
+                <Line type="monotone" dataKey="value" stroke={CATEGORY_COLORS[selected.category] || "#3b82f6"} strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <EmptyState icon="sequence" title="暂无趋势数据" />
+          )}
         </div>
       )}
 
@@ -185,7 +197,6 @@ function KeyIndicators() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 12 }}>
               {catIndicators.map((ind) => {
                 const isSelected = selectedId === ind.id;
-                // Find latest obs for this specific indicator
                 return (
                   <div key={ind.id}
                     className="card"
@@ -198,12 +209,9 @@ function KeyIndicators() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{ind.name_cn || ind.name}</div>
-                      <div>
-                        <span className={`badge ${ind.is_automated ? "badge-green" : "badge-orange"}`}
-                          style={{ fontSize: 10, padding: "1px 6px" }}>
-                          {ind.is_automated ? "自动" : "手动"}
-                        </span>
-                      </div>
+                      <Badge variant={ind.is_automated ? "success" : "warning"}>
+                        {ind.is_automated ? "自动" : "手动"}
+                      </Badge>
                     </div>
                     <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 8, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                       {ind.description}
@@ -220,7 +228,7 @@ function KeyIndicators() {
                       <div style={{ marginTop: 6 }}>
                         <a href={ind.source_url} target="_blank" rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          style={{ fontSize: 11, color: "var(--accent-blue)" }}>
+                          style={{ fontSize: 11, color: "var(--accent)" }}>
                           数据源 ↗
                         </a>
                       </div>
